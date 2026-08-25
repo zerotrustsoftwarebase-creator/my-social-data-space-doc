@@ -1,3 +1,12 @@
 title: My (Social) Data Space
-description: Documentation for the My (Social) Data Space app
-theme: jekyll-theme-primer
+description: Keep what you measure on your own phone, and share it with the people you choose — never with a platform.
+url: https://zerotrustsoftwarebase-creator.github.io
+baseurl: /my-social-data-space-doc
+markdown: kramdown
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+exclude:
+  - README.md
