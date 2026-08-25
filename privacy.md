@@ -10,7 +10,7 @@ permalink: /privacy/
 ### 1. Who is responsible
 
 The developer of My (Social) Data Space (GitHub: `zerotrustsoftwarebase-creator`) provides this app. For questions about this policy,
-contact **an issue at https://github.com/zerotrustsoftwarebase-creator/my-social-data-space-doc/issues** (please do not put personal data into a public issue).
+open **an issue at https://github.com/zerotrustsoftwarebase-creator/my-social-data-space-doc/issues** (please do not put personal data into a public issue).
 
 ### 2. The short version
 
