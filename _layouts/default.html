@@ -27,15 +27,16 @@
   a { color:var(--brand-bright); text-underline-offset:.15em; overflow-wrap:anywhere; }
   a:hover { color:var(--ink); }
   :focus-visible { outline:3px solid var(--mint); outline-offset:3px; border-radius:4px; }
-  .skip { position:absolute; left:1rem; top:-4rem; background:var(--mint); color:var(--on-light); padding:.6rem 1rem; border-radius:8px; font-weight:600; z-index:10; text-decoration:none; }
-  .skip:focus { top:1rem; }
+  .skip { position:absolute; left:1rem; top:1rem; transform:translateY(calc(-100% - 2rem)); background:var(--mint); color:var(--on-light); padding:.6rem 1rem; border-radius:8px; font-weight:600; z-index:10; text-decoration:none; }
+  .skip:focus { transform:none; }
   .wrap { max-width:1120px; margin:0 auto; padding:0 1.25rem; }
   .site-header { border-bottom:1px solid var(--line); background:rgba(8,10,15,.85); backdrop-filter:blur(8px); position:sticky; top:0; z-index:5; }
   .site-header .wrap { display:flex; align-items:center; justify-content:space-between; gap:1rem; min-height:4rem; }
   .brand { display:flex; align-items:center; gap:.7rem; color:var(--ink); text-decoration:none; font-family:var(--font-head); font-weight:700; white-space:nowrap; }
   .brand img { width:2.25rem; height:2.25rem; border-radius:9px; display:block; }
   .brand span span { color:var(--brand-bright); }
-  nav ul { list-style:none; margin:0; padding:0; display:flex; gap:.25rem; }
+  .mobile-nav { display:none; }
+  nav ul { list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:.25rem; }
   nav a { display:inline-block; padding:.6rem .8rem; color:var(--ink-2); text-decoration:none; font-weight:600; border-radius:8px; white-space:nowrap; }
   nav a:hover { color:var(--ink); background:var(--raised); }
   main { padding:clamp(2rem,5vw,4rem) 0 clamp(3rem,6vw,5rem); }
@@ -48,20 +49,42 @@
   .prose p, .prose li { color:var(--ink-2); }
   .prose strong { color:var(--ink); }
   .prose code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.92em; background:var(--raised); padding:.1em .4em; border-radius:5px; color:var(--ink); }
+  .prose :not(pre) > code { overflow-wrap:anywhere; word-break:break-word; }
+  .prose pre { max-width:100%; margin:1rem 0 1.5rem; padding:.85rem 1rem; overflow-x:auto; background:var(--raised); border:1px solid var(--line); border-radius:10px; -webkit-overflow-scrolling:touch; }
+  .prose pre code { display:block; width:max-content; min-width:100%; padding:0; background:transparent; }
   .prose ul { padding-left:1.25rem; }
   .prose li + li { margin-top:.4rem; }
   .prose table { border-collapse:collapse; width:100%; margin:1rem 0 1.5rem; font-size:.97rem; display:block; overflow-x:auto; }
   .prose th, .prose td { text-align:left; vertical-align:top; padding:.65rem .8rem; border-bottom:1px solid var(--line); }
   .prose th { color:var(--ink); font-family:var(--font-head); font-weight:700; font-size:.85rem; letter-spacing:.06em; text-transform:uppercase; }
   .prose td { color:var(--ink-2); }
+  .layer-list { display:grid; gap:.8rem; margin:1rem 0 1.5rem; }
+  .layer-list > div { display:grid; gap:.55rem; padding:1rem; background:var(--surface); border:1px solid var(--line); border-radius:12px; }
+  .layer-list dt { color:var(--ink); font-family:var(--font-head); font-weight:700; }
+  .layer-list dt span { display:block; margin-top:.2rem; color:var(--mint); font-family:var(--font-body); font-size:.82em; font-weight:600; }
+  .layer-list dd { margin:0; color:var(--ink-2); }
+  .layer-list dd strong { display:block; margin-bottom:.1rem; font-size:.78em; letter-spacing:.06em; text-transform:uppercase; }
   .prose hr { border:0; border-top:1px solid var(--line); margin:2rem 0; }
   footer { border-top:1px solid var(--line); padding:2rem 0 3rem; color:var(--ink-2); font-size:.95rem; }
   footer ul { list-style:none; margin:0 0 1rem; padding:0; display:flex; flex-wrap:wrap; gap:.25rem 1.25rem; }
   @media (max-width:600px) {
+    .site-header { position:static; }
     .site-header .wrap { flex-wrap:wrap; justify-content:flex-start; padding-top:.5rem; padding-bottom:.5rem; }
-    .site-header nav { width:100%; margin-left:-.6rem; }
-    nav a { padding:.45rem .6rem; font-size:.95rem; }
-    .brand { font-size:.95rem; }
+    .desktop-nav { display:none; }
+    .brand { min-width:0; }
+    .brand > span { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+    .mobile-nav { display:block; margin-left:auto; }
+    .mobile-nav summary { display:grid; place-items:center; width:3rem; height:3rem; color:var(--ink); background:var(--raised); border:1px solid var(--line); border-radius:10px; cursor:pointer; list-style:none; }
+    .mobile-nav summary::-webkit-details-marker { display:none; }
+    .mobile-nav summary svg { width:1.5rem; height:1.5rem; }
+    .mobile-nav[open] { flex-basis:100%; margin-left:0; }
+    .mobile-nav[open] summary { margin-left:auto; }
+    .mobile-nav nav { width:100%; margin-top:.4rem; }
+    .mobile-nav nav ul { display:grid; gap:.2rem; }
+    .mobile-nav nav a { display:block; max-width:100%; padding:.55rem .65rem; font-size:.95rem; white-space:normal; }
+  }
+  @media (min-width:700px) {
+    .layer-list > div { grid-template-columns:minmax(0,.72fr) repeat(2,minmax(0,1fr)); gap:1rem; }
   }
 </style>
 </head>
@@ -73,14 +96,27 @@
       <img src="{{ '/assets/store-icon-512.png' | relative_url }}" alt="" width="36" height="36">
       <span>My (Social) <span>Data Space</span></span>
     </a>
-    <nav aria-label="Site">
+    <nav class="desktop-nav" aria-label="Site">
       <ul>
         <li><a href="{{ '/' | relative_url }}">Home</a></li>
         <li><a href="{{ '/community-service/' | relative_url }}">Community service</a></li>
+        <li><a href="{{ '/connected-tools/' | relative_url }}">Connected tools</a></li>
         <li><a href="{{ '/privacy/' | relative_url }}">Privacy policy</a></li>
-        <li><a href="https://github.com/zerotrustsoftwarebase-creator/my-social-data-space-doc/issues">Contact</a></li>
       </ul>
     </nav>
+    <details class="mobile-nav">
+      <summary aria-label="Open site navigation" title="Menu">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </summary>
+      <nav aria-label="Site">
+        <ul>
+          <li><a href="{{ '/' | relative_url }}">Home</a></li>
+          <li><a href="{{ '/community-service/' | relative_url }}">Community service</a></li>
+          <li><a href="{{ '/connected-tools/' | relative_url }}">Connected tools</a></li>
+          <li><a href="{{ '/privacy/' | relative_url }}">Privacy policy</a></li>
+        </ul>
+      </nav>
+    </details>
   </div>
 </header>
 <main id="main">
@@ -94,6 +130,7 @@
   <div class="wrap">
     <ul aria-label="Footer">
       <li><a href="{{ '/' | relative_url }}">Home</a></li>
+      <li><a href="{{ '/connected-tools/' | relative_url }}">Connected tools</a></li>
       <li><a href="{{ '/privacy/' | relative_url }}">Privacy policy</a></li>
       <li><a href="{{ '/privacy/#7-deleting-your-data' | relative_url }}">Deleting your data</a></li>
       <li><a href="{{ '/child-safety/' | relative_url }}">Child safety standards</a></li>

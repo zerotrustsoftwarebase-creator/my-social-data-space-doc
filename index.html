@@ -51,10 +51,10 @@
   a:hover { color: var(--ink); }
   :focus-visible { outline: 3px solid var(--mint); outline-offset: 3px; border-radius: 4px; }
   .skip {
-    position: absolute; left: 1rem; top: -4rem; background: var(--mint); color: var(--on-light);
+    position: absolute; left: 1rem; top: 1rem; transform: translateY(calc(-100% - 2rem)); background: var(--mint); color: var(--on-light);
     padding: .6rem 1rem; border-radius: 8px; font-weight: 600; z-index: 10; text-decoration: none;
   }
-  .skip:focus { top: 1rem; }
+  .skip:focus { transform: none; }
   .wrap { max-width: var(--max); margin: 0 auto; padding: 0 1.25rem; }
 
   /* Header */
@@ -63,7 +63,8 @@
   .brand { display: flex; align-items: center; gap: .7rem; color: var(--ink); text-decoration: none; font-family: var(--font-head); font-weight: 700; white-space: nowrap; }
   .brand img { width: 2.25rem; height: 2.25rem; border-radius: 9px; }
   .brand span span { color: var(--brand-bright); }
-  nav ul { list-style: none; margin: 0; padding: 0; display: flex; gap: .25rem; }
+  .mobile-nav { display: none; }
+  nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .25rem; }
   nav a { display: inline-block; padding: .6rem .8rem; color: var(--ink-2); text-decoration: none; font-weight: 600; border-radius: 8px; white-space: nowrap; }
   nav a:hover { color: var(--ink); background: var(--raised); }
 
@@ -139,8 +140,9 @@
 
   footer { border-top: 1px solid var(--line); padding: 2.5rem 0 3rem; color: var(--ink-2); font-size: .95rem; }
   footer .wrap { display: grid; gap: 1.25rem; }
+  footer .wrap > * { min-width: 0; }
   footer ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; }
-  footer .wordmark { max-width: 360px; opacity: .95; }
+  footer .wordmark { width: 100%; max-width: 360px; opacity: .95; }
   footer small { display: block; max-width: 72ch; line-height: 1.55; }
 
   @media (max-width: 860px) {
@@ -149,10 +151,22 @@
     .feature figure { max-width: 380px; }
   }
   @media (max-width: 600px) {
+    .site-header { position: static; }
     .site-header .wrap { flex-wrap: wrap; justify-content: flex-start; padding-top: .5rem; padding-bottom: .5rem; }
-    .site-header nav { width: 100%; margin-left: -.6rem; }
-    nav a { padding: .45rem .6rem; font-size: .95rem; }
-    .brand { font-size: .95rem; }
+    .desktop-nav { display: none; }
+    .brand { min-width: 0; }
+    .brand > span { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    .mobile-nav { display: block; margin-left: auto; }
+    .mobile-nav summary { display: grid; place-items: center; width: 3rem; height: 3rem; color: var(--ink); background: var(--raised); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; list-style: none; }
+    .mobile-nav summary::-webkit-details-marker { display: none; }
+    .mobile-nav summary svg { width: 1.5rem; height: 1.5rem; }
+    .mobile-nav[open] { flex-basis: 100%; margin-left: 0; }
+    .mobile-nav[open] summary { margin-left: auto; }
+    .mobile-nav nav { width: 100%; margin-top: .4rem; }
+    .mobile-nav nav ul { display: grid; gap: .2rem; }
+    .mobile-nav nav a { display: block; max-width: 100%; padding: .55rem .65rem; font-size: .95rem; white-space: normal; }
+    .steps li, .trust li { min-width: 0; padding: clamp(1rem, 4vw, 1.5rem); overflow-wrap: break-word; }
+    .trust li { grid-template-columns: 1fr; }
     .btn { width: 100%; justify-content: center; }
   }
 </style>
@@ -166,14 +180,25 @@
       <img src="assets/store-icon-512.png" alt="" width="36" height="36">
       <span>My (Social) <span>Data Space</span></span>
     </a>
-    <nav aria-label="Site">
+    <nav class="desktop-nav" aria-label="Site">
       <ul>
-        <li><a href="#privacy">Your data</a></li>
         <li><a href="community-service/">Community service</a></li>
+        <li><a href="connected-tools/">Connected tools</a></li>
         <li><a href="privacy/">Privacy policy</a></li>
-        <li><a href="https://github.com/zerotrustsoftwarebase-creator/my-social-data-space-doc/issues">Contact</a></li>
       </ul>
     </nav>
+    <details class="mobile-nav">
+      <summary aria-label="Open site navigation" title="Menu">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </summary>
+      <nav aria-label="Site">
+        <ul>
+          <li><a href="community-service/">Community service</a></li>
+          <li><a href="connected-tools/">Connected tools</a></li>
+          <li><a href="privacy/">Privacy policy</a></li>
+        </ul>
+      </nav>
+    </details>
   </div>
 </header>
 
@@ -324,6 +349,7 @@
   <div class="wrap">
     <img class="wordmark" src="assets/wordmark-on-dark-1600x400.png" width="1600" height="400" loading="lazy" alt="My (Social) Data Space — Your data stays on your phone.">
     <ul aria-label="Footer">
+      <li><a href="connected-tools/">Connected tools</a></li>
       <li><a href="privacy/">Privacy policy</a></li>
       <li><a href="privacy/#7-deleting-your-data">Deleting your data</a></li>
       <li><a href="child-safety/">Child safety standards</a></li>
