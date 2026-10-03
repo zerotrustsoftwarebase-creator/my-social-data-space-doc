@@ -71,9 +71,13 @@ alter or delete what it holds. Read that operator's own policy before you publis
 Three specifics you should know before you publish anything:
 
 - **Pictures and videos you publish are stored where anyone holding the link can
-  fetch them.** They are addressed by their content, and location metadata is
-  stripped before that address is computed, but the file itself is not access
-  controlled.
+  fetch them.** They are addressed by their content, but the file itself is not
+  access controlled. For newly attached JPEG, PNG and WebP photos, the app removes
+  standard descriptive metadata, including GPS fields in EXIF and XMP, before
+  computing that address. Other formats, including HEIC/HEIF/AVIF, GIF, video and
+  audio, may retain location or other metadata; the attachment screen explains
+  this before sharing. Older attachments are not automatically rewritten. Details
+  visible in the image or recording are part of the content and remain.
 - **Other people keep what you sent them.** Once somebody has received a post or a
   message, that copy is theirs and on their device.
 - **A community service keeps what it was given.** The services this app speaks
@@ -129,8 +133,9 @@ worth stating precisely because it is easy to assume otherwise from what the app
 can do. When you attach a picture or read numbers from a screenshot, the app asks
 Android to open the system camera or the system picker; that system component hands
 back the single file you chose, and the app never gains access to your camera or to
-the rest of your library. Location metadata is stripped from an image before it is
-addressed. Text recognition from a screenshot runs on your device.
+the rest of your library. Metadata removal applies to newly attached JPEG, PNG and
+WebP images as described in §4; other formats may retain hidden location metadata.
+Your original file is unchanged. Text recognition from a screenshot runs on your device.
 
 The app requests no access to your contacts, your call log, your messages, your
 precise location, or anything in the background beyond the scheduled check above.
