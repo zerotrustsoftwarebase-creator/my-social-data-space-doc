@@ -78,7 +78,7 @@ Supabase project has exactly that, on the free tier, in about ten minutes.
 1. **Create a project** at [supabase.com](https://supabase.com). Any region;
    the free tier is enough to start.
 2. **Apply the schema.** Download
-   [`apply_all_2026-09-02.sql`](../assets/community-service/apply_all_2026-09-02.sql),
+   [`apply_all_2026-10-03.sql`](../assets/community-service/apply_all_2026-10-03.sql),
    open the project's **SQL Editor**, paste the whole file in and press Run.
    It creates the tables, the policies and the `post_media` bucket in one go.
    Running it again later is safe — every statement only adds what is missing —
@@ -89,11 +89,18 @@ Supabase project has exactly that, on the free tier, in about ten minutes.
 4. **Connect your own phone** with the URL and key as described above, then
    **invite your members**.
 
+**Updating a service set up before October 2026.** The October schema makes
+private-message and steward mailboxes readable only through a request for one
+exact address, and caps how many drops an address takes per day. Run the latest
+file again **after your members have updated the app**: versions of the app from
+before October 2026 cannot collect private messages from a service that has it.
+The current app works with the service either way.
+
 ## When it does not work
 
 - **"Will not carry GIFs / this kind of file yet."** The service's schema is
   older than the app. Run the latest
-  [schema file](../assets/community-service/apply_all_2026-09-02.sql) again;
+  [schema file](../assets/community-service/apply_all_2026-10-03.sql) again;
   it only adds what is missing.
 - **Private messages through the service never arrive.** The same cause: a
   service set up before September 2026 lacks the private-message mailbox. Run

@@ -104,9 +104,17 @@ python3 mds_connector.py connect --profile frigate \
     --topic '<topic id>' --invite '<paste the whole invite>' --every 30
 ```
 
-Your phone shows the tool's name and what it is asking for. Check the name,
-pick only the topic and fields it needs, set a sensible rate and an end date,
-and approve. From then on it carries readings every thirty seconds.
+The connector prints a verification code, and your phone shows the tool's
+name, the same kind of code and what it is asking for. Approve only if the two
+codes are exactly the same — anybody who saw the invite could answer it under
+the same name, but not with your connector's code. If your phone says more
+than one tool answered, choose the one whose code your connector printed, or
+cancel and create a new invite. Then pick only the topic and fields it needs,
+set a sensible rate and an end date, and approve. From then on it carries
+readings every thirty seconds.
+
+The invite also carries a fingerprint of your phone's identity, and the
+connector offers itself to no other device that answers at that address.
 
 To start it again later — after a reboot, or when you stopped it:
 
@@ -140,7 +148,8 @@ behaviour in a settings file.
 ## When it does not work
 
 - **"That is not a usable invite."** Copy a fresh one, including the whole
-  `mds-tool-invite.v1.` beginning. Invites are short-lived and only one
+  `mds-tool-invite.v2.` beginning. A `v1` invite comes from an app that needs
+  updating. Invites are short-lived and only one
   connection at a time is allowed.
 - **It cannot reach the phone.** Keep the app open and put both devices on the
   same private Wi-Fi or wired network. Guest Wi-Fi usually blocks devices from

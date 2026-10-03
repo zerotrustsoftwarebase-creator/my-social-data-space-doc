@@ -11,7 +11,7 @@ of that.
     python3 mds_connector.py fields  --profile frigate
     python3 mds_connector.py preview --profile frigate
     python3 mds_connector.py connect --profile frigate --topic <topic id> \
-        --invite 'mds-tool-invite.v1....'
+        --invite 'mds-tool-invite.v2....'
     python3 mds_connector.py run     --profile frigate --topic <topic id>
 
 The machine-specific part is a JSON profile, not code: it says where the
@@ -34,6 +34,7 @@ import base64
 import datetime as _dt
 import hashlib
 import hmac
+import http.client
 import json
 import os
 import random
@@ -68,8 +69,13 @@ except ImportError:  # pragma: no cover - the message is the whole point
 
 # --- the wire vocabulary, shared with the app -------------------------------
 
-PROTOCOL_VERSION = "mds/1"
-INVITE_SCHEME = "mds-tool-invite.v1."
+# mds/2 (2026-10): the hello proof is domain-separated and the nonce must be
+# 32 random bytes, the answering phone contributes its own nonce, and each
+# direction of a session has its own key. A phone on app versions 20 or 21
+# speaks mds/1 and refuses this connector by name (and vice versa); see
+# docs/NEARBY-PROTOCOL-MDS2.md in the app repository.
+PROTOCOL_VERSION = "mds/2"
+INVITE_SCHEME = "mds-tool-invite.v2."
 INVITE_MAX_ENCODED = 512
 
 # Frozen in the app's contract; a command outside these windows is refused.
@@ -401,53 +407,188 @@ def _open_boxed(envelope: dict, recipient: PodKeys) -> dict:
     return decoded
 
 
+_HELLO_NONCE = re.compile(r"^[A-Za-z0-9_-]{43}$")
+
+
+def is_hello_nonce(value: Any) -> bool:
+    """32 random bytes, base64url, unpadded — the only nonce mds/2 accepts."""
+    return isinstance(value, str) and _HELLO_NONCE.fullmatch(value) is not None
+
+
+def is_ephemeral_key(value: Any) -> bool:
+    """An ephemeral X25519 public key as a hello carries it: the nonce's shape."""
+    return is_hello_nonce(value)
+
+
+def mint_hello_nonce() -> str:
+    return b64url(os.urandom(32)).rstrip("=")
+
+
+def caller_proof_bytes(client_nonce: str, caller_did: str, caller_ephemeral_key: str) -> bytes:
+    """What the caller (this connector) signs in its hello.
+
+    It binds this connection's ephemeral key to the connector's identity, so
+    nobody on the path can swap it. The same bytes as the app's
+    `peerCallerHelloProofBytes`.
+    """
+    return "\x00".join(
+        ["mds-hello-caller", PROTOCOL_VERSION, client_nonce, caller_did, caller_ephemeral_key]
+    ).encode("utf-8")
+
+
+def hello_transcript(
+    client_nonce: str,
+    server_nonce: str,
+    caller_did: str,
+    caller_ephemeral_key: str,
+    answerer_did: str,
+    answerer_exchange_key: str,
+    answerer_ephemeral_key: str,
+    features: list,
+    group_challenge: str,
+    tool_grant_nonce: str,
+) -> bytes:
+    """What the phone signs to answer a hello, and what salts the session keys.
+
+    Domain-separated and bound to both nonces, both ephemeral keys, both
+    identities, the phone's exchange address and everything else in its answer
+    this connector acts on. mds/1 signed the caller's nonce bytes as they
+    arrived, which made the phone sign whatever a stranger chose. The same
+    bytes as the app's `peerHelloTranscript`.
+    """
+    return "\x00".join(
+        [
+            "mds-hello-answer",
+            PROTOCOL_VERSION,
+            client_nonce,
+            server_nonce,
+            caller_did,
+            caller_ephemeral_key,
+            answerer_did,
+            answerer_exchange_key,
+            answerer_ephemeral_key,
+            ",".join(features),
+            group_challenge,
+            tool_grant_nonce,
+        ]
+    ).encode("utf-8")
+
+
+SESSION_INFO_CLIENT_TO_SERVER = f"{PROTOCOL_VERSION}|peer-session|client-to-server"
+SESSION_INFO_SERVER_TO_CLIENT = f"{PROTOCOL_VERSION}|peer-session|server-to-client"
+SESSION_MAC_LENGTH = 16
+MAX_FRAMES_PER_DIRECTION = 1 << 48
+
+# The first frame b"frame" sealed caller-to-phone by a session agreed from the
+# ephemeral private keys 0x01*32 (caller) and 0x02*32 (phone) over the
+# transcript b"mds/2 session vector". app/test/peer_session_test.dart pins the
+# same literal for the app's implementation.
+SESSION_VECTOR_FIRST_FRAME = "242753c114d9bd9626c133a856947b17b574a561ec"
+
+
+def ephemeral_public_key(private: X25519PrivateKey) -> str:
+    """An ephemeral key's public half, spelled as a hello carries it."""
+    return b64url(private.public_key().public_bytes_raw()).rstrip("=")
+
+
+def frame_nonce(position: int) -> bytes:
+    """Frame n of a direction is sealed under 0^16 ‖ uint64_be(n)."""
+    return b"\x00" * 16 + position.to_bytes(8, "big")
+
+
 class PeerSession:
     """The cipher protecting one connection after its handshake.
 
-    The X25519 agreement is expanded once per connection with the authenticated
-    handshake nonce, not once per frame. Binding the key to that fresh nonce
-    also means a frame captured from one connection cannot be replayed into the
-    next connection between the same two long-term keys.
+    Agreed from two EPHEMERAL X25519 keys, one minted by each end for this
+    connection alone and signed in its hello, expanded with HKDF-SHA256 salted
+    with SHA-256 of the hello transcript into one key per direction. The
+    long-term keys are not part of it: a recorded session stays unreadable
+    even to somebody who later holds both devices' stored keys.
+
+    Each direction is one strictly ordered stream: frame n is sealed under
+    the AEAD nonce 0^16 ‖ uint64_be(n) and opens only as the n-th frame. A
+    dropped, reordered or replayed frame fails to open, and the first failure
+    ends the session.
     """
 
-    def __init__(self, secret: bytes) -> None:
-        self._secret = secret
+    def __init__(self, send_key: bytes, receive_key: bytes) -> None:
+        self._send_key: bytes | None = send_key
+        self._receive_key: bytes | None = receive_key
+        self._sent = 0
+        self._received = 0
+        self._broken = False
 
     @staticmethod
-    def derive(own: PodKeys, peer_exchange_key_b64: Any, handshake_nonce: str) -> "PeerSession | None":
-        raw = decode_sealed_address(peer_exchange_key_b64)
-        if raw is None or not handshake_nonce:
+    def derive(
+        own_ephemeral: X25519PrivateKey,
+        peer_ephemeral_key: Any,
+        transcript: bytes,
+        is_client: bool,
+    ) -> "PeerSession | None":
+        """The session one end will use, or nothing when the peer's key is unusable.
+
+        The caller drops its own reference to `own_ephemeral` straight after;
+        Python cannot overwrite the key's memory the way the app does, so the
+        best this program can do is hold the private key for one handshake and
+        no longer.
+        """
+        if not is_ephemeral_key(peer_ephemeral_key) or not transcript:
             return None
         try:
-            shared = own.shared_secret(raw)
+            raw = unb64url(peer_ephemeral_key)
+            if len(raw) != 32:
+                return None
+            # Raises for a low-order point (an all-zero agreement), which is
+            # exactly the refusal the app makes.
+            shared = own_ephemeral.exchange(X25519PublicKey.from_public_bytes(raw))
         except Exception:
             return None
-        return PeerSession(
-            hkdf_sha256(
-                shared,
-                handshake_nonce.encode("utf-8"),
-                f"{PROTOCOL_VERSION}|peer-session".encode("utf-8"),
-            )
-        )
+        salt = hashlib.sha256(transcript).digest()
+        to_server = hkdf_sha256(shared, salt, SESSION_INFO_CLIENT_TO_SERVER.encode("utf-8"))
+        to_client = hkdf_sha256(shared, salt, SESSION_INFO_SERVER_TO_CLIENT.encode("utf-8"))
+        del shared
+        return PeerSession(to_server, to_client) if is_client else PeerSession(to_client, to_server)
 
     def seal(self, frame: bytes) -> bytes:
-        nonce = os.urandom(24)
-        boxed = xchacha20poly1305_encrypt(self._secret, nonce, frame)
-        # nonce ‖ mac ‖ ciphertext — fixed-width prefixes, so the reader never
-        # has to trust a length the sender supplied.
-        return nonce + boxed[-16:] + boxed[:-16]
+        if self._send_key is None or self._sent >= MAX_FRAMES_PER_DIRECTION:
+            raise Refused("this connection to the phone has ended")
+        position = self._sent
+        self._sent += 1
+        boxed = xchacha20poly1305_encrypt(self._send_key, frame_nonce(position), frame)
+        # mac ‖ ciphertext. The position is the nonce, so nothing on the wire
+        # says where a frame sits and nothing on the path can rewrite it.
+        return boxed[-SESSION_MAC_LENGTH:] + boxed[:-SESSION_MAC_LENGTH]
 
     def open(self, body: bytes) -> bytes | None:
-        if len(body) < 40:
+        if self._broken or self._receive_key is None or len(body) < SESSION_MAC_LENGTH:
+            self._broken = True
             return None
+        position = self._received
+        self._received += 1
         try:
-            return xchacha20poly1305_decrypt(self._secret, body[:24], body[40:] + body[24:40])
+            return xchacha20poly1305_decrypt(
+                self._receive_key,
+                frame_nonce(position),
+                body[SESSION_MAC_LENGTH:] + body[:SESSION_MAC_LENGTH],
+            )
         except Exception:
+            self._broken = True
             return None
+
+    def destroy(self) -> None:
+        """Forget both direction keys. The connection is over."""
+        self._send_key = None
+        self._receive_key = None
 
 
 def exchange_key_binding(nonce: str, exchange_key: str) -> bytes:
-    """The exact bytes a peer signs to bind its exchange key to one hello."""
+    """What an mds/1 phone needed a caller to sign before it would answer.
+
+    Read by no mds/2 phone. A phone on app version 20 or 21 checks no version:
+    it refuses a hello without this binding, and answers one that has it with
+    a hello naming mds/1 — which is how this connector can say "update the
+    app" instead of a refusal nobody can act on.
+    """
     return f"mds-hello-exchange-key|{nonce}|{exchange_key}".encode("utf-8")
 
 
@@ -570,46 +711,107 @@ class PodLink:
         return link
 
     def _handshake(self) -> None:
-        nonce = b64url(os.urandom(32))
+        nonce = mint_hello_nonce()
+        # This connection's own key pair (forward secrecy). The phone agrees
+        # the session from it and refuses the connection outright unless it is
+        # bound to this tool's identity: an unbound key on a plaintext socket
+        # may already be an on-path attacker's swap.
+        ephemeral: X25519PrivateKey | None = X25519PrivateKey.generate()
+        own_ephemeral = ephemeral_public_key(ephemeral)
         own_key = self._keys.encoded_exchange_key
-        # Our own key, bound to this nonce. The phone derives the session from
-        # it and refuses the connection outright without it: an unbound key on
-        # a plaintext socket may already be an on-path attacker's swap.
-        self._write(
-            encode_frame(
-                "hello",
-                {
-                    "nonce": nonce,
-                    "did": self._keys.did,
-                    "exchange_key": own_key,
-                    "key_proof": self._keys.sign(exchange_key_binding(nonce, own_key)),
-                },
+        try:
+            self._write(
+                encode_frame(
+                    "hello",
+                    {
+                        "protocol": PROTOCOL_VERSION,
+                        "nonce": nonce,
+                        "did": self._keys.did,
+                        "ephemeral_key": own_ephemeral,
+                        "proof": self._keys.sign(
+                            caller_proof_bytes(nonce, self._keys.did, own_ephemeral)
+                        ),
+                        # Read by no mds/2 phone; an mds/1 phone needs them
+                        # before it will answer with a hello naming its version.
+                        "exchange_key": own_key,
+                        "key_proof": self._keys.sign(exchange_key_binding(nonce, own_key)),
+                    },
+                )
             )
-        )
-        hello = self._next_plain("hello")
-        pod_did = hello.get("did")
-        proof = hello.get("proof")
-        exchange_key = hello.get("exchange_key")
-        key_proof = hello.get("key_proof")
-        if (
-            not isinstance(pod_did, str)
-            or not verify_signature(nonce.encode("utf-8"), proof, pod_did)
-            or not isinstance(exchange_key, str)
-            or not verify_signature(exchange_key_binding(nonce, exchange_key), key_proof, pod_did)
-        ):
-            raise Refused("the phone did not prove its identity and its address")
-        decoded = decode_sealed_address(exchange_key)
-        if decoded is None:
-            raise Refused("the phone advertised an address this connector cannot seal to")
-        session = PeerSession.derive(self._keys, exchange_key, nonce)
-        if session is None:
-            raise Refused("no encrypted session could be agreed with this phone")
+            hello = self._next_plain("hello")
+            their_protocol = hello.get("protocol")
+            if their_protocol != PROTOCOL_VERSION:
+                named = their_protocol if isinstance(their_protocol, str) and len(their_protocol) <= 16 else "an older one"
+                raise Refused(
+                    f"the app on that phone speaks protocol {named}, and this connector speaks "
+                    f"{PROTOCOL_VERSION}.\nUpdate the app and this connector to the same release."
+                )
+            server_nonce = hello.get("server_nonce")
+            if not is_hello_nonce(server_nonce):
+                raise Refused("the phone did not contribute a valid connection nonce")
+            pod_did = hello.get("did")
+            proof = hello.get("proof")
+            exchange_key = hello.get("exchange_key")
+            their_ephemeral = hello.get("ephemeral_key")
+            features = hello.get("features", [])
+            group_challenge = hello.get("group_challenge", "")
+            tool_grant_nonce = hello.get("tool_grant_nonce", "")
+            if (
+                not isinstance(pod_did, str)
+                or not isinstance(exchange_key, str)
+                or not is_ephemeral_key(their_ephemeral)
+                or not isinstance(features, list)
+                or not all(isinstance(feature, str) for feature in features)
+                or not isinstance(group_challenge, str)
+                or not isinstance(tool_grant_nonce, str)
+                or not verify_signature(
+                    hello_transcript(
+                        nonce,
+                        server_nonce,
+                        self._keys.did,
+                        own_ephemeral,
+                        pod_did,
+                        exchange_key,
+                        their_ephemeral,
+                        features,
+                        group_challenge,
+                        tool_grant_nonce,
+                    ),
+                    proof,
+                    pod_did,
+                )
+            ):
+                raise Refused("the phone did not prove its identity and its address")
+            decoded = decode_sealed_address(exchange_key)
+            if decoded is None:
+                raise Refused("the phone advertised an address this connector cannot seal to")
+            session = PeerSession.derive(
+                ephemeral,
+                their_ephemeral,
+                hello_transcript(
+                    nonce,
+                    server_nonce,
+                    self._keys.did,
+                    own_ephemeral,
+                    pod_did,
+                    exchange_key,
+                    their_ephemeral,
+                    features,
+                    group_challenge,
+                    tool_grant_nonce,
+                ),
+                is_client=True,
+            )
+            if session is None:
+                raise Refused("no encrypted session could be agreed with this phone")
+        finally:
+            # One handshake, one key: dropped whatever happened above.
+            ephemeral = None
         self.pod_did = pod_did
         self.pod_exchange_key = decoded
         self._session = session
-        self.protocol = hello.get("protocol") if isinstance(hello.get("protocol"), str) else None
-        got_nonce = hello.get("tool_grant_nonce")
-        self.grant_nonce = got_nonce if isinstance(got_nonce, str) else None
+        self.protocol = their_protocol
+        self.grant_nonce = tool_grant_nonce or None
 
     def _write(self, raw: bytes) -> None:
         try:
@@ -644,17 +846,22 @@ class PodLink:
                 raise Refused(self._refusal(header))
 
     def next(self, kind: str) -> dict:
-        """The next frame of this kind, unwrapping the session that carries it."""
+        """The next frame of this kind, unwrapping the session that carries it.
+
+        Anything that is not the next sealed frame ends the link: the phone
+        seals even its refusals, so a plaintext frame is somebody else talking,
+        and a sealed frame that does not open in sequence was forged, dropped
+        behind, reordered or replayed. Skipping it would only leave this
+        connector waiting for frames that can no longer open.
+        """
         while True:
             header, body = self._receive()
-            if header.get("kind") == "session":
-                opened = self._session.open(body) if self._session else None
-                if opened is None:
-                    # A frame this connection cannot open is not one to guess
-                    # about — that is how a probe gets an answer it should
-                    # never have had.
-                    continue
-                header = self._reader.decode_single(opened)
+            if header.get("kind") != "session" or self._session is None:
+                raise Refused("the phone sent a frame outside the encrypted session")
+            opened = self._session.open(body)
+            if opened is None:
+                raise Refused("a frame from the phone did not open as the next one in this session")
+            header = self._reader.decode_single(opened)
             if header.get("kind") == kind:
                 return header
             if header.get("kind") == "error":
@@ -668,6 +875,8 @@ class PodLink:
         )
 
     def close(self) -> None:
+        if self._session is not None:
+            self._session.destroy()
         try:
             self._socket.close()
         except OSError:
@@ -683,23 +892,53 @@ class PodLink:
 # --- the invite -------------------------------------------------------------
 
 
+def pod_fingerprint(pod_did: str) -> str:
+    """What a v2 invite carries to name the phone that made it (H1).
+
+    The same value the app computes (`toolPodFingerprint`): SHA-256 over a
+    domain-separated DID, base64url without padding.
+    """
+    return b64url(hashlib.sha256(f"mds-tool-pod|{pod_did}".encode("utf-8")).digest()).rstrip("=")
+
+
+_CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+
+def verification_code(tool_did: str, challenge: str) -> str:
+    """The code the phone shows beside this tool's offer (H1).
+
+    Derived from this tool's DID and the invite's challenge, so the person can
+    tell their own tool from anything else that answered the same invite. The
+    same value the app computes (`toolVerificationCode`).
+    """
+    digest = hashlib.sha256(f"mds-tool-verification|{challenge}|{tool_did}".encode("utf-8")).digest()
+    bits = int.from_bytes(digest[:5], "big")
+    code = "".join(_CROCKFORD[(bits >> shift) & 31] for shift in range(35, -5, -5))
+    return f"{code[:4]}-{code[4:]}"
+
+
 class Invite:
     """The opaque text a person hands to a tool to start a connection.
 
-    It carries four things and cannot carry a fifth: where to reach the phone,
-    which attempt this is, the challenge to sign, and the protocol being
-    spoken. Nothing about an account, a key, a topic or a permission is in it,
-    so it stays worthless to everyone who sees it and is not this tool.
+    It carries five things and cannot carry a sixth: where to reach the phone,
+    which attempt this is, the challenge to sign, the protocol being spoken,
+    and the fingerprint of the phone's identity. The fingerprint is what makes
+    the invite name a phone rather than an address: this connector refuses a
+    phone whose proved identity does not match it, before offering anything.
+    Nothing about an account, a key, a topic or a permission is readable in it.
     """
 
-    KEYS = {"host", "port", "session", "challenge", "protocol"}
+    KEYS = {"host", "port", "session", "challenge", "protocol", "pod"}
 
-    def __init__(self, host: str, port: int, session_id: str, challenge: str, protocol: str) -> None:
+    def __init__(
+        self, host: str, port: int, session_id: str, challenge: str, protocol: str, pod: str
+    ) -> None:
         self.host = host
         self.port = port
         self.session_id = session_id
         self.challenge = challenge
         self.protocol = protocol
+        self.pod = pod
 
     @staticmethod
     def decode(text: Any) -> "Invite | None":
@@ -719,6 +958,9 @@ class Invite:
         host, port = parsed["host"], parsed["port"]
         session_id, challenge = parsed["session"], parsed["challenge"]
         protocol = parsed["protocol"]
+        pod = parsed["pod"]
+        if not isinstance(pod, str) or re.fullmatch(r"[A-Za-z0-9_-]{43}", pod) is None:
+            return None
         if not isinstance(host, str) or not isinstance(session_id, str):
             return None
         if not isinstance(challenge, str) or not isinstance(protocol, str):
@@ -731,7 +973,7 @@ class Invite:
         for value in (host, session_id, challenge):
             if not value or len(value) > 128 or _has_unsafe_rune(value):
                 return None
-        return Invite(host, port, session_id, challenge, protocol)
+        return Invite(host, port, session_id, challenge, protocol, pod)
 
 
 def _has_unsafe_rune(value: str) -> bool:
@@ -1149,6 +1391,15 @@ def connect_tool(
                 "the app on that phone speaks a version this invite was not made for.\n"
                 "Update the app, then copy a fresh invite."
             )
+        # **The invite names the phone, not just an address** (H1). Whatever
+        # answers at the address proves ITS identity in the handshake; only the
+        # one whose identity the invite carries is offered anything.
+        if not hmac.compare_digest(pod_fingerprint(link.pod_did), invite.pod):
+            raise Refused(
+                f"the device answering at {invite.host}:{invite.port} is not the phone that made "
+                "this invite.\nNothing was sent to it. Check the address, or create a fresh "
+                "invite on your phone."
+            )
         exchange_key = keys.encoded_exchange_key
         link.send(
             "offerToolEnrolment",
@@ -1168,7 +1419,11 @@ def connect_tool(
                 "Invites are short-lived and one connection at a time is allowed — "
                 "copy a fresh one and try again."
             )
-        say(f'Offered as "{label}". Approve it on the phone.')
+        code = verification_code(keys.did, invite.challenge)
+        say(
+            f'Offered as "{label}". The phone shows the verification code {code} for this tool.\n'
+            f"Approve it on the phone only if the code there is exactly {code}."
+        )
 
         request = seal_grant_request(
             invite.session_id, invite.challenge, keys, link.pod_did, link.pod_exchange_key
@@ -2135,10 +2390,163 @@ def _credential(profile_key: str, credentials: dict) -> str | None:
     return value or None
 
 
+def _origin(url: str) -> tuple[str, str, int | None]:
+    parsed = urllib.parse.urlsplit(url)
+    scheme = parsed.scheme.lower()
+    default = {"http": 80, "https": 443}.get(scheme)
+    return scheme, (parsed.hostname or "").lower(), parsed.port or default
+
+
+class _SameOriginRedirects(urllib.request.HTTPRedirectHandler):
+    """Follows redirects, but carries credentials only within one origin.
+
+    Credentials are attached with `add_unredirected_header`, which urllib drops
+    on EVERY redirect. That alone would turn an honest trailing-slash hop on the
+    machine itself into a refused read, so they are put back — and only — when
+    the redirect stays on the same scheme, host and port. A machine (or anybody
+    able to answer for it) that redirects elsewhere gets a request with no
+    Authorization and no Cookie. `add_header` used to copy both onto the
+    redirected request, wherever it went.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        follow = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if follow is not None and _origin(newurl) == _origin(req.full_url):
+            for name, value in req.unredirected_hdrs.items():
+                follow.add_unredirected_header(name, value)
+        return follow
+
+
+class CertificatePins:
+    """Certificate fingerprints for machines a person chose to trust by pinning.
+
+    **Never a silent disable.** Certificates are verified by default. A machine
+    on the home network with a self-signed certificate is reached only when the
+    person passes `--pin-machine-certificate`: the first connection records the
+    SHA-256 of the certificate the machine presents (and says so, loudly, with
+    the fingerprint), and every later connection must present exactly that
+    certificate or is refused. `--machine-certificate-sha256` pins a known
+    fingerprint up front instead of trusting the first one seen.
+    """
+
+    def __init__(
+        self,
+        path: str,
+        trust_on_first_use: bool = False,
+        expected: str | None = None,
+        say=lambda line: None,
+    ) -> None:
+        self.path = path
+        self.trust_on_first_use = trust_on_first_use
+        self.expected = _normalised_fingerprint(expected) if expected else None
+        self.say = say
+
+    def _read(self) -> dict:
+        if not os.path.exists(self.path):
+            return {}
+        try:
+            with open(self.path, "r", encoding="utf-8") as handle:
+                raw = json.load(handle)
+        except Exception as error:
+            raise Refused(f"the certificate pins in {self.path} could not be read: {error}")
+        return raw if isinstance(raw, dict) else {}
+
+    def _write(self, pins: dict) -> None:
+        directory = os.path.dirname(self.path)
+        if directory:
+            os.makedirs(directory, mode=0o700, exist_ok=True)
+        partial = self.path + ".partial"
+        with open(partial, "w", encoding="utf-8") as handle:
+            json.dump(pins, handle, indent=2, sort_keys=True)
+        os.chmod(partial, 0o600)
+        os.replace(partial, self.path)
+
+    def check(self, host: str, port: int, der: bytes | None) -> None:
+        """Accepts [der] for host:port, records it on first use, or refuses."""
+        if not der:
+            raise Refused(f"the machine at {host}:{port} presented no certificate")
+        presented = hashlib.sha256(der).hexdigest()
+        key = f"{host}:{port}"
+        if self.expected is not None:
+            if presented != self.expected:
+                raise Refused(
+                    f"the machine at {key} presented a certificate with SHA-256 "
+                    f"{_spaced(presented)}, not the one you pinned ({_spaced(self.expected)}).\n"
+                    "Nothing was sent to it."
+                )
+            return
+        pins = self._read()
+        known = pins.get(key)
+        if known is None:
+            if not self.trust_on_first_use:
+                raise Refused(f"no certificate is pinned for {key}")
+            pins[key] = presented
+            self._write(pins)
+            self.say(
+                f"Trusting the certificate {key} presented, SHA-256 {_spaced(presented)}, "
+                f"and refusing any other from now on (pinned in {self.path}).\n"
+                "If you cannot confirm this fingerprint on the machine itself, stop now."
+            )
+            return
+        if known != presented:
+            raise Refused(
+                f"the machine at {key} presented a DIFFERENT certificate than the one pinned "
+                f"the first time (now {_spaced(presented)}, pinned {_spaced(known)}).\n"
+                "Nothing was sent to it. If the machine's certificate really changed, remove its "
+                f"line from {self.path} and pin it again."
+            )
+
+
+def _normalised_fingerprint(text: str) -> str:
+    cleaned = re.sub(r"[^0-9a-fA-F]", "", text.removeprefix("sha256:")).lower()
+    if len(cleaned) != 64:
+        raise Refused("a certificate fingerprint is 64 hexadecimal characters (SHA-256)")
+    return cleaned
+
+
+def _spaced(fingerprint: str) -> str:
+    return ":".join(fingerprint[i : i + 2] for i in range(0, len(fingerprint), 2)).upper()
+
+
+class _PinnedHTTPSHandler(urllib.request.HTTPSHandler):
+    """HTTPS whose only trust anchor is a pinned certificate fingerprint."""
+
+    def __init__(self, pins: CertificatePins) -> None:
+        context = ssl.create_default_context()
+        # The CA chain and the name are not what is trusted here — the exact
+        # certificate is, checked in `connect` below before any byte is sent.
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        super().__init__(context=context)
+        self._pins = pins
+        self._context = context
+
+    def https_open(self, req):
+        pins = self._pins
+        context = self._context
+
+        class PinnedConnection(http.client.HTTPSConnection):
+            def connect(self) -> None:
+                super().connect()
+                try:
+                    pins.check(self.host, self.port, self.sock.getpeercert(binary_form=True))
+                except BaseException:
+                    self.sock.close()
+                    raise
+
+        return self.do_open(PinnedConnection, req, context=context)
+
+
 class HttpMachine(RecordSource):
     """A machine polled over HTTP, which is every profile that is not a broker."""
 
-    def __init__(self, base_url: str, profile: MachineProfile, credentials: dict) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        profile: MachineProfile,
+        credentials: dict,
+        certificate_pins: CertificatePins | None = None,
+    ) -> None:
         self.base_url = base_url
         self.profile = profile
         self.credentials = credentials
@@ -2146,13 +2554,33 @@ class HttpMachine(RecordSource):
         self.window_minutes: int | None = None
         self._cookie: str | None = None
         self._authorization: str | None = None
-        # A machine on the home network usually carries its own certificate.
-        # Accepted for this connector and nothing else: the connection stays on
-        # the local network and carries no data outward.
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        self._opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=context))
+        # **Verified by default** (M10). This used to switch certificate and
+        # name checks off for every machine, so anybody able to answer for the
+        # machine's address on the network received the sign-in it was sent.
+        # A self-signed machine is reachable only through an explicit pin.
+        https = (
+            _PinnedHTTPSHandler(certificate_pins)
+            if certificate_pins is not None
+            else urllib.request.HTTPSHandler(context=ssl.create_default_context())
+        )
+        self._opener = urllib.request.build_opener(https, _SameOriginRedirects())
+
+    def _open(self, request):
+        try:
+            return self._opener.open(request, timeout=REPLY_DEADLINE)
+        except urllib.error.URLError as error:
+            reason = getattr(error, "reason", None)
+            if isinstance(reason, ssl.SSLCertVerificationError):
+                raise Refused(
+                    f"the machine's certificate could not be verified ({reason.verify_message}).\n"
+                    "If it is a machine on your own network with a self-signed certificate, run "
+                    "again with --pin-machine-certificate to trust the certificate it presents now "
+                    "and refuse any other later, or pass --machine-certificate-sha256 with the "
+                    "fingerprint shown on the machine."
+                )
+            if isinstance(reason, Refused):
+                raise reason
+            raise
 
     def authenticate(self) -> None:
         profile = self.profile
@@ -2197,7 +2625,7 @@ class HttpMachine(RecordSource):
                 request.add_header(name, value)
             request.add_header("Content-Type", "application/json")
             try:
-                with self._opener.open(request, timeout=REPLY_DEADLINE) as response:
+                with self._open(request) as response:
                     cookies = response.headers.get_all("Set-Cookie") or []
                     response.read(1)
             except urllib.error.HTTPError as error:
@@ -2226,12 +2654,16 @@ class HttpMachine(RecordSource):
         request = urllib.request.Request(url)
         for name, value in profile.headers.items():
             request.add_header(name, value)
+        # **Unredirected** (M10): `add_header` is copied onto a redirected
+        # request wherever it goes, so a machine redirecting to another host
+        # handed that host the session and the token. `_SameOriginRedirects`
+        # puts these back only for a hop that stays on the same machine.
         if self._cookie:
-            request.add_header("Cookie", self._cookie)
+            request.add_unredirected_header("Cookie", self._cookie)
         if self._authorization:
-            request.add_header(profile.auth_header or "Authorization", self._authorization)
+            request.add_unredirected_header(profile.auth_header or "Authorization", self._authorization)
         try:
-            with self._opener.open(request, timeout=REPLY_DEADLINE) as response:
+            with self._open(request) as response:
                 body = self._read_bounded(response)
         except urllib.error.HTTPError as error:
             # The status before the body: a refusal's page is of no interest,
@@ -3014,12 +3446,31 @@ def _base_url(profile: MachineProfile, credentials: dict, path: str) -> str:
     return re.sub(r"/+$", "", raw)
 
 
-def _source_for(profile: MachineProfile, credentials: dict, base_url: str) -> RecordSource:
+def _certificate_pins_for(options) -> CertificatePins | None:
+    """The explicit, opt-in way to reach a machine with a self-signed certificate.
+
+    Without either flag, HTTPS is verified like any other client verifies it.
+    """
+    expected = getattr(options, "machine_certificate_sha256", None)
+    first_use = bool(getattr(options, "pin_machine_certificate", False))
+    if not expected and not first_use:
+        return None
+    path = getattr(options, "certificate_pins", None) or os.path.join(
+        DEFAULT_HOME, "machine-certificates.json"
+    )
+    return CertificatePins(path, trust_on_first_use=first_use, expected=expected, say=_warn)
+
+
+def _source_for(
+    profile: MachineProfile, credentials: dict, base_url: str, options=None
+) -> RecordSource:
     if profile.source_kind == "mqtt":
         broker = BrokerMachine(profile, credentials, warn=_warn)
         broker.open(re.sub(r"^[a-z]+://", "", base_url))
         return broker
-    machine = HttpMachine(base_url, profile, credentials)
+    machine = HttpMachine(
+        base_url, profile, credentials, certificate_pins=_certificate_pins_for(options)
+    )
     machine.authenticate()
     return machine
 
@@ -3068,7 +3519,7 @@ def command_preview(options) -> int:
     notice = unusable_window_notice(profile, options.limit, options.since_minutes)
     if notice:
         _warn(notice)
-    source = _source_for(profile, credentials, base_url)
+    source = _source_for(profile, credentials, base_url, options)
     try:
         if isinstance(source, BrokerMachine):
             print(
@@ -3148,7 +3599,7 @@ def _carry(options, profile: MachineProfile, state: State, state_path: str, host
     if since_minutes is None and interval is not None:
         since_minutes = max(2, -(-interval * 3 // 60))
 
-    source = _source_for(profile, credentials, base_url)
+    source = _source_for(profile, credentials, base_url, options)
     try:
         if isinstance(source, HttpMachine):
             source.window = limit
@@ -3200,8 +3651,14 @@ def command_connect(options) -> int:
             "Use 'run' to keep carrying, or pass --again to connect afresh."
         )
         return 64
+    # Flushed: the verification code has to reach the person WHILE they are
+    # looking at the phone, not when the connector next fills a pipe buffer.
     grant, pod_did, _ = connect_tool(
-        state.keys, invite, options.name or profile.name, options.topic, say=print
+        state.keys,
+        invite,
+        options.name or profile.name,
+        options.topic,
+        say=lambda line: print(line, flush=True),
     )
     # A new permission starts its own watermark at zero, and its own budget.
     state.raw.update(
@@ -3285,10 +3742,15 @@ def command_check(_options) -> int:
     if open_envelope(envelope, bob) != {"hello": "there"}:
         _warn("a sealed envelope does not open for its recipient")
         return 70
-    first = PeerSession.derive(alice, bob.encoded_exchange_key, "shared-nonce")
-    second = PeerSession.derive(bob, alice.encoded_exchange_key, "shared-nonce")
-    if second.open(first.seal(b"frame")) != b"frame":
-        _warn("two ends of a connection do not agree on a session key")
+    if not _sessions_hold():
+        return 70
+    # The same literals app/test/tool_enrolment_invite_test.dart pins for the
+    # app's own implementation: the phone and this connector must agree.
+    if pod_fingerprint("did:key:zTheOwnersPod") != "GsfGnjmXssWf2g8VSgT5lpQ5_mlx3XnGncxQf0YwSzQ":
+        _warn("the invite's phone fingerprint is not computed the way the app computes it")
+        return 70
+    if verification_code("did:key:zTheTool", "challenge-1") != "KZHB-PPQC":
+        _warn("the verification code is not computed the way the app computes it")
         return 70
     if not _refusals_hold():
         return 70
@@ -3300,6 +3762,43 @@ def command_check(_options) -> int:
     print(f"{len(profiles)} shipped profile(s) parse.")
     return 0
 
+
+
+def _sessions_hold() -> bool:
+    """The session cipher against its known-answer vector and its attacks."""
+    transcript = b"mds/2 session vector"
+    caller = X25519PrivateKey.from_private_bytes(bytes([1]) * 32)
+    phone = X25519PrivateKey.from_private_bytes(bytes([2]) * 32)
+    first = PeerSession.derive(caller, ephemeral_public_key(phone), transcript, True)
+    second = PeerSession.derive(phone, ephemeral_public_key(caller), transcript, False)
+    if first is None or second is None:
+        _warn("two ends of a connection do not agree on a session key")
+        return False
+    sealed = first.seal(b"frame")
+    # The same literal app/test/peer_session_test.dart pins for the app: the
+    # phone and this connector must agree on every byte of a sealed frame.
+    if sealed.hex() != SESSION_VECTOR_FIRST_FRAME:
+        _warn("a session frame is not sealed the way the app seals it")
+        return False
+    if second.open(sealed) != b"frame":
+        _warn("two ends of a connection do not agree on a session key")
+        return False
+    if first.open(first.seal(b"reflected")) is not None:
+        _warn("a session frame can be reflected back to the end that sealed it")
+        return False
+    if second.open(sealed) is not None:
+        _warn("a session frame opens twice")
+        return False
+    # A replayed hello: the phone answers the recorded caller key with a fresh
+    # ephemeral key of its own, so a recorded frame opens nowhere.
+    recorded = PeerSession.derive(
+        X25519PrivateKey.from_private_bytes(bytes([1]) * 32), ephemeral_public_key(phone), transcript, True
+    )
+    replayed = PeerSession.derive(X25519PrivateKey.generate(), ephemeral_public_key(caller), transcript, False)
+    if recorded is None or replayed is None or replayed.open(recorded.seal(b"recorded")) is not None:
+        _warn("a recorded session opens on a new connection")
+        return False
+    return True
 
 
 def _refusals_hold() -> bool:
@@ -3396,25 +3895,43 @@ def _refusals_hold() -> bool:
     # decides where a mistyped one sends this tool.
     real = INVITE_SCHEME + b64url(compact_json({
         "host": "192.168.1.5", "port": 8765, "session": session_id,
-        "challenge": challenge, "protocol": PROTOCOL_VERSION,
+        "challenge": challenge, "protocol": PROTOCOL_VERSION, "pod": pod_fingerprint(phone.did),
     }).encode("utf-8")).rstrip("=")
     if Invite.decode(real) is None:
         _warn("an honest invite was not read")
         return False
+    # Every case carries a well-formed pod fingerprint unless it is the case
+    # being tested, so each is refused for its own reason and not for that one.
+    pod = pod_fingerprint(phone.did)
     for name, payload in (
-        ("invite with a sixth field", {"host": "h", "port": 1, "session": "s", "challenge": "c",
-                                       "protocol": PROTOCOL_VERSION, "did": "extra"}),
+        ("invite with a seventh field", {"host": "h", "port": 1, "session": "s", "challenge": "c",
+                                         "protocol": PROTOCOL_VERSION, "pod": pod, "did": "extra"}),
         ("invite naming another protocol", {"host": "h", "port": 1, "session": "s",
-                                            "challenge": "c", "protocol": "mds/2"}),
+                                            "challenge": "c", "protocol": "mds/1", "pod": pod}),
         ("invite whose host hides a line break", {"host": "one\ntwo", "port": 1, "session": "s",
-                                                  "challenge": "c", "protocol": PROTOCOL_VERSION}),
+                                                  "challenge": "c", "protocol": PROTOCOL_VERSION,
+                                                  "pod": pod}),
         ("invite with no reachable port", {"host": "h", "port": 0, "session": "s",
-                                           "challenge": "c", "protocol": PROTOCOL_VERSION}),
+                                           "challenge": "c", "protocol": PROTOCOL_VERSION,
+                                           "pod": pod}),
+        ("invite naming no phone", {"host": "h", "port": 1, "session": "s", "challenge": "c",
+                                    "protocol": PROTOCOL_VERSION}),
+        ("invite with a malformed phone fingerprint", {"host": "h", "port": 1, "session": "s",
+                                                       "challenge": "c",
+                                                       "protocol": PROTOCOL_VERSION,
+                                                       "pod": pod + "="}),
     ):
         encoded = INVITE_SCHEME + b64url(compact_json(payload).encode("utf-8")).rstrip("=")
         if Invite.decode(encoded) is not None:
             _warn(f"an {name} was NOT refused")
             ok = False
+    v1 = "mds-tool-invite.v1." + b64url(compact_json({
+        "host": "192.168.1.5", "port": 8765, "session": session_id,
+        "challenge": challenge, "protocol": PROTOCOL_VERSION,
+    }).encode("utf-8")).rstrip("=")
+    if Invite.decode(v1) is not None:
+        _warn("a v1 invite, which names no phone, was read")
+        ok = False
     if Invite.decode("just some text a person pasted") is not None:
         _warn("text that is not an invite was read as one")
         ok = False
@@ -3443,6 +3960,23 @@ def build_parser() -> argparse.ArgumentParser:
     def shared(sub, needs_profile=True):
         if needs_profile:
             sub.add_argument("--profile", required=True, help="a shipped profile name, or a path to one")
+            # HTTPS to the machine is verified by default. These are the only way
+            # past a self-signed certificate, and both pin one exact certificate.
+            sub.add_argument(
+                "--pin-machine-certificate",
+                action="store_true",
+                help="the machine uses a self-signed certificate: trust the one it presents "
+                "the first time (its SHA-256 is printed and saved) and refuse any other later",
+            )
+            sub.add_argument(
+                "--machine-certificate-sha256",
+                help="trust only the machine certificate with this SHA-256 fingerprint",
+            )
+            sub.add_argument(
+                "--certificate-pins",
+                help="where pinned machine certificates are kept "
+                "(default ~/.mds-connector/machine-certificates.json)",
+            )
         sub.add_argument("--credentials", help="file holding this machine's address and sign-in")
         return sub
 

@@ -4,7 +4,9 @@
 --
 -- Paste into the Supabase SQL editor of your project, or run
 -- `supabase db push` from supabase/, which applies the same files.
--- Re-running is safe: every statement is written to be idempotent.
+-- Re-running is safe: every statement is written to be idempotent, and
+-- tool/relay-schema-verify.sh applies this bundle twice in a row over a
+-- migrated schema holding a row of every kind before any release.
 
 -- ============================================================
 -- supabase/migrations/202608010001_mds_relay.sql
@@ -131,7 +133,17 @@ set
   ) - 'member_count' - 'post_count',
   updated_at = now()
 from legacy
-where spaces.space_id = legacy.space_id;
+where spaces.space_id = legacy.space_id
+  -- Only a row that still carries something to remove. Without this, every
+  -- re-application of the series rewrote these rows' `updated_at` although
+  -- nothing about them changed — "re-running only adds what is missing" was
+  -- true of every file but this one.
+  and (
+    spaces.member_count = legacy.placeholder_members
+    or spaces.definition ->> 'steward_id' = legacy.placeholder_steward
+    or spaces.definition ? 'member_count'
+    or spaces.definition ? 'post_count'
+  );
 
 -- ============================================================
 -- supabase/migrations/202608030001_signed_authored_topics.sql
@@ -198,13 +210,38 @@ create policy "mds authored topics are append only"
 -- Likes and conversation messages are signed by the people who created them
 -- and travel as append-only events. Neither rewrites somebody else's immutable
 -- post envelope.
+--
+-- **Only ever widens the kind check.** Two later files widen it again
+-- (`202608090001`, `202608110001`). Dropping and re-adding this narrower list
+-- unconditionally made a re-application of the series — which the operator
+-- bundle tells people is safe — fail on any relay already carrying a
+-- `message_reaction`, `proposal` or `proposal_vote` row, and would have
+-- narrowed the check on one that did not. So the check is replaced only when
+-- it does not already admit every kind this file needs.
 
-alter table public.mds_relay_events
-  drop constraint if exists mds_relay_events_kind_check;
+do $$
+declare
+  needed text[] := array['post', 'engagement', 'message', 'tombstone'];
+  current_check text;
+begin
+  select pg_get_constraintdef(con.oid) into current_check
+    from pg_constraint con
+   where con.conrelid = 'public.mds_relay_events'::regclass
+     and con.conname = 'mds_relay_events_kind_check';
+  if current_check is not null and not exists (
+    select 1 from unnest(needed) as kind
+     where position('''' || kind || '''' in current_check) = 0
+  ) then
+    return;
+  end if;
 
-alter table public.mds_relay_events
-  add constraint mds_relay_events_kind_check
-  check (kind in ('post', 'engagement', 'message', 'tombstone'));
+  alter table public.mds_relay_events
+    drop constraint if exists mds_relay_events_kind_check;
+  alter table public.mds_relay_events
+    add constraint mds_relay_events_kind_check
+    check (kind in ('post', 'engagement', 'message', 'tombstone'));
+end
+$$;
 
 -- ============================================================
 -- supabase/migrations/202608050001_reversible_topic_discovery.sql
@@ -517,13 +554,34 @@ where spaces.space_id = fixture.space_id
 -- Reactions to conversation messages travel exactly as post engagements do:
 -- signed, append-only, actor-scoped events. The server stores and serves; every
 -- receiving pod verifies the signature and target before Drift sees the row.
+--
+-- Only ever widens the kind check, for the reason `202608040001` gives: a
+-- later file (`202608110001`) widens it again, and re-applying this narrower
+-- list over a relay that holds `proposal` rows failed outright.
 
-alter table public.mds_relay_events
-  drop constraint if exists mds_relay_events_kind_check;
+do $$
+declare
+  needed text[] := array['post', 'engagement', 'message', 'message_reaction', 'tombstone'];
+  current_check text;
+begin
+  select pg_get_constraintdef(con.oid) into current_check
+    from pg_constraint con
+   where con.conrelid = 'public.mds_relay_events'::regclass
+     and con.conname = 'mds_relay_events_kind_check';
+  if current_check is not null and not exists (
+    select 1 from unnest(needed) as kind
+     where position('''' || kind || '''' in current_check) = 0
+  ) then
+    return;
+  end if;
 
-alter table public.mds_relay_events
-  add constraint mds_relay_events_kind_check
-  check (kind in ('post', 'engagement', 'message', 'message_reaction', 'tombstone'));
+  alter table public.mds_relay_events
+    drop constraint if exists mds_relay_events_kind_check;
+  alter table public.mds_relay_events
+    add constraint mds_relay_events_kind_check
+    check (kind in ('post', 'engagement', 'message', 'message_reaction', 'tombstone'));
+end
+$$;
 
 -- ============================================================
 -- supabase/migrations/202608100001_abuse_reports.sql
@@ -578,16 +636,40 @@ create policy "anyone may file a report"
 -- proposer's signature and the ballot's credential before either may exist
 -- there, so the relay is a carrier and never an authority on what a community
 -- decided.
+--
+-- Only ever widens the kind check, like the two files before it. This one is
+-- the widest today; guarding it too means a later file that adds a kind does
+-- not turn a re-application of this one into the narrowing that failed before.
 
-alter table public.mds_relay_events
-  drop constraint if exists mds_relay_events_kind_check;
-
-alter table public.mds_relay_events
-  add constraint mds_relay_events_kind_check
-  check (kind in (
+do $$
+declare
+  needed text[] := array[
     'post', 'engagement', 'message', 'message_reaction',
     'proposal', 'proposal_vote', 'tombstone'
-  ));
+  ];
+  current_check text;
+begin
+  select pg_get_constraintdef(con.oid) into current_check
+    from pg_constraint con
+   where con.conrelid = 'public.mds_relay_events'::regclass
+     and con.conname = 'mds_relay_events_kind_check';
+  if current_check is not null and not exists (
+    select 1 from unnest(needed) as kind
+     where position('''' || kind || '''' in current_check) = 0
+  ) then
+    return;
+  end if;
+
+  alter table public.mds_relay_events
+    drop constraint if exists mds_relay_events_kind_check;
+  alter table public.mds_relay_events
+    add constraint mds_relay_events_kind_check
+    check (kind in (
+      'post', 'engagement', 'message', 'message_reaction',
+      'proposal', 'proposal_vote', 'tombstone'
+    ));
+end
+$$;
 
 -- ============================================================
 -- supabase/migrations/202608120001_steward_report_mailbox.sql
@@ -1012,7 +1094,16 @@ where id = 'post_media';
 -- S-17: one tiny change check replaces one empty event-page request per joined
 -- topic on every foreground tick. RLS still governs the underlying table and
 -- the function reveals only the position already exposed by public event rows.
-create or replace function public.mds_relay_event_heads(requested_space_ids text[])
+--
+-- Dropped first, not `create or replace`d. `202608270001` widens this
+-- function's result with a `total` column, and PostgreSQL refuses to change a
+-- function's result type in place — so on any relay that had already run the
+-- whole series, re-applying it (which the operator bundle tells people is
+-- safe) stopped here with "cannot change return type of existing function".
+-- The next file replaces this definition again; a client that calls it in
+-- between gets the narrower result, which every client already reads.
+drop function if exists public.mds_relay_event_heads(text[]);
+create function public.mds_relay_event_heads(requested_space_ids text[])
 returns table(space_id text, cursor text)
 language sql
 stable
@@ -1159,3 +1250,245 @@ drop policy if exists "sealed messages are readable and unreadable"
   on public.mds_private_message_mailbox;
 create policy "sealed messages are readable and unreadable"
   on public.mds_private_message_mailbox for select to anon, authenticated using (true);
+
+-- ============================================================
+-- supabase/migrations/202610030001_mailbox_read_by_secret.sql
+-- ============================================================
+-- Mailboxes are read by naming the address, never by listing the table.
+--
+-- **What the two mailbox migrations got wrong, stated rather than glossed.**
+-- `202609020001_private_message_mailbox` routes on an address that is 32 bytes
+-- of randomness, and its comments call that address unguessable. It is — and
+-- then the same file granted `select ... using (true)` on the whole table, so
+-- nobody had to guess: `GET /rest/v1/mds_private_message_mailbox?select=inbox_id`
+-- handed every address to anybody holding the publishable key. With the list
+-- in hand, one script could drop a million junk rows at every address; a pod
+-- reads fifty drops per address per pass, oldest first, so a real message
+-- queued behind them would wait months. And "a second contact of the same
+-- person gets a different address, so an operator cannot group them" stopped
+-- being true for anyone who could watch the list grow.
+--
+-- `202608120001_steward_report_mailbox` has the same shape for steward DIDs.
+-- A DID is public anyway, so hiding it from a lister buys less — but the whole
+-- table still listed who receives reports and how many, and it had no bound on
+-- how many junk rows one stranger could leave for one steward.
+--
+-- **The fix keeps the address model and stops publishing it.**
+--
+--   * Table SELECT is revoked from the client roles. The address is what the
+--     reader proves it knows: `mds_private_message_drops(address, after, limit)`
+--     returns rows for exactly that address and nothing else. It is the same
+--     bearer secret the reader already holds — the pod minted it and handed it
+--     over in person — so no client key changes and no contact has to meet
+--     again.
+--   * Senders are untouched. They write to the address they were given, with
+--     the same INSERT, exactly as before. A sender knowing an address is what
+--     the design always assumed; what changes is that NOBODY ELSE can learn it
+--     from this database.
+--   * One address holds at most 1000 drops in any 24 hours (one steward DID,
+--     likewise). Past that, an insert is refused with HTTP 429 and the sender's
+--     pod keeps the message and tries again later. This is the bound on the
+--     flood: whoever does know an address can delay that one channel by a day's
+--     worth of junk, never by months. The number is mirrored by
+--     `relayMailboxDropsPerWindow` in the client, which the tests pin to this
+--     file.
+--   * `inserted_at` on the private mailbox is now server-owned, as it already
+--     was on the steward mailbox. A cap measured by a timestamp the writer
+--     chooses is a cap the writer turns off by backdating.
+--
+-- **What this still does not hide**, so an operator is not described a better
+-- service than they run: the operator's own maintenance role still reads every
+-- row (sealed bytes and an address, as before), and anyone who learns one
+-- address — the contact, or someone the contact leaked it to — can still drop
+-- at it and read the sealed drops there. Confidentiality remains the payload's
+-- job. A steward's DID is public, so anybody can still drop at, and fetch the
+-- sealed drops for, a steward they can name; what they can no longer do is
+-- enumerate every steward who receives reports.
+--
+-- **Compatibility.** App builds before 21 (versionCode) read both tables with a plain
+-- SELECT. On a service with this migration those reads are refused (401), so
+-- members on an older app stop collecting private messages and steward copies
+-- until they update; their sending is unaffected. App 21 and later try the
+-- functions first and fall back to the old SELECT when the function is missing
+-- (404), so they keep working on a service that has not applied this file yet.
+-- Apply it once your members are on 21 or later.
+--
+-- Idempotent like every other file here: rerunning the whole series in order
+-- ends in this state, because this file runs after the two it amends.
+
+-- --- the private message mailbox -------------------------------------------
+
+drop policy if exists "sealed messages are readable and unreadable"
+  on public.mds_private_message_mailbox;
+revoke select on public.mds_private_message_mailbox from anon, authenticated;
+-- INSERT stays, and so does the identity sequence it needs.
+grant insert on public.mds_private_message_mailbox to anon, authenticated;
+grant usage, select on sequence public.mds_private_message_mailbox_sequence_seq
+  to anon, authenticated;
+
+-- Server-owned custody time, with the same function every other relay table
+-- uses (202608130001). Required by the cap below, not merely tidy.
+drop trigger if exists mds_force_server_receipt on public.mds_private_message_mailbox;
+create trigger mds_force_server_receipt
+  before insert on public.mds_private_message_mailbox
+  for each row execute function public.mds_force_server_receipt();
+
+create index if not exists mds_private_message_mailbox_inbox_time_idx
+  on public.mds_private_message_mailbox (inbox_id, inserted_at);
+
+drop function if exists public.mds_private_message_drops(text, bigint, integer);
+create function public.mds_private_message_drops(
+  requested_inbox_id text,
+  after_sequence bigint default null,
+  page_limit integer default 50
+)
+returns table(sequence bigint, payload jsonb)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select m.sequence, m.payload
+    from public.mds_private_message_mailbox as m
+   -- The shape check first: anything that is not an address a pod could have
+   -- minted names no mailbox, and is answered with nothing.
+   where requested_inbox_id ~ '^[A-Za-z0-9_-]{43}$'
+     and m.inbox_id = requested_inbox_id
+     and m.sequence > coalesce(after_sequence, 0)
+   order by m.sequence asc
+   limit least(greatest(coalesce(page_limit, 50), 1), 50);
+$$;
+
+comment on function public.mds_private_message_drops(text, bigint, integer) is
+  'Sealed drops for one contact address, oldest first, at most 50. The address '
+  'is the reader''s proof; the table itself is not readable by client roles.';
+
+revoke all on function public.mds_private_message_drops(text, bigint, integer) from public;
+grant execute on function public.mds_private_message_drops(text, bigint, integer)
+  to anon, authenticated;
+
+-- --- the steward report mailbox ---------------------------------------------
+
+drop policy if exists "sealed reports are readable and unreadable"
+  on public.mds_steward_report_mailbox;
+revoke select on public.mds_steward_report_mailbox from anon, authenticated;
+grant insert on public.mds_steward_report_mailbox to anon, authenticated;
+grant usage, select on sequence public.mds_steward_report_mailbox_sequence_seq
+  to anon, authenticated;
+
+create index if not exists mds_steward_report_mailbox_recipient_time_idx
+  on public.mds_steward_report_mailbox (recipient_did, inserted_at);
+
+drop function if exists public.mds_steward_report_drops(text, bigint, integer);
+create function public.mds_steward_report_drops(
+  requested_recipient_did text,
+  after_sequence bigint default null,
+  page_limit integer default 50
+)
+returns table(sequence bigint, payload jsonb)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select m.sequence, m.payload
+    from public.mds_steward_report_mailbox as m
+   where char_length(requested_recipient_did) between 40 and 180
+     and requested_recipient_did ~ '^did:key:z[A-Za-z0-9_-]+$'
+     and m.recipient_did = requested_recipient_did
+     and m.sequence > coalesce(after_sequence, 0)
+   order by m.sequence asc
+   limit least(greatest(coalesce(page_limit, 50), 1), 50);
+$$;
+
+comment on function public.mds_steward_report_drops(text, bigint, integer) is
+  'Sealed steward copies for one recipient DID, oldest first, at most 50. The '
+  'table itself is not readable by client roles, so recipients cannot be listed.';
+
+revoke all on function public.mds_steward_report_drops(text, bigint, integer) from public;
+grant execute on function public.mds_steward_report_drops(text, bigint, integer)
+  to anon, authenticated;
+
+-- --- the per-address flood cap ----------------------------------------------
+
+-- One function for both tables: the routing column is the only difference.
+-- SECURITY DEFINER because the inserting role can no longer read the table it
+-- is counting. The advisory lock serialises writers to one address, so two
+-- concurrent floods cannot both read 999 and both insert.
+create or replace function public.mds_mailbox_drop_cap()
+returns trigger
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  cap constant integer := 1000;
+  window_length constant interval := interval '24 hours';
+  route text;
+  recent integer;
+begin
+  if tg_table_name = 'mds_private_message_mailbox' then
+    route := new.inbox_id;
+    perform pg_advisory_xact_lock(hashtextextended('mds_private_message_mailbox:' || route, 0));
+    select count(*) into recent
+      from (
+        select 1
+          from public.mds_private_message_mailbox as m
+         where m.inbox_id = route
+           and m.inserted_at > now() - window_length
+           -- Rows written before custody time was server-owned may carry any
+           -- timestamp; one claiming the future must not hold the cap shut.
+           and m.inserted_at <= now()
+         limit cap
+      ) as within_window;
+  elsif tg_table_name = 'mds_steward_report_mailbox' then
+    route := new.recipient_did;
+    perform pg_advisory_xact_lock(hashtextextended('mds_steward_report_mailbox:' || route, 0));
+    select count(*) into recent
+      from (
+        select 1
+          from public.mds_steward_report_mailbox as m
+         where m.recipient_did = route
+           and m.inserted_at > now() - window_length
+           and m.inserted_at <= now()
+         limit cap
+      ) as within_window;
+  else
+    raise exception 'mds_mailbox_drop_cap is attached to an unexpected table %', tg_table_name;
+  end if;
+
+  if recent >= cap then
+    -- PostgREST answers a PTxyz state with HTTP xyz. 429 is what the client
+    -- already reads as "not now": the message stays on the sender's pod and is
+    -- offered again on a later pass, rather than being reported as refused.
+    raise sqlstate 'PT429'
+      using message = 'this mailbox is full for now',
+            detail = 'at most 1000 drops per address in 24 hours';
+  end if;
+  return new;
+end;
+$$;
+
+comment on function public.mds_mailbox_drop_cap() is
+  'Refuses a mailbox drop with HTTP 429 once one address holds 1000 drops from '
+  'the last 24 hours, bounding how far junk can push a real message back.';
+
+-- Named roles too: a hosted project's default privileges grant EXECUTE on new
+-- functions to the client roles directly, which a revoke from PUBLIC misses.
+revoke all on function public.mds_mailbox_drop_cap() from public, anon, authenticated;
+
+drop trigger if exists mds_mailbox_drop_cap on public.mds_private_message_mailbox;
+create trigger mds_mailbox_drop_cap
+  before insert on public.mds_private_message_mailbox
+  for each row execute function public.mds_mailbox_drop_cap();
+
+drop trigger if exists mds_mailbox_drop_cap on public.mds_steward_report_mailbox;
+create trigger mds_mailbox_drop_cap
+  before insert on public.mds_steward_report_mailbox
+  for each row execute function public.mds_mailbox_drop_cap();
+
+-- PostgREST caches the schema; without this the new functions answer 404
+-- until its next reload, and app 21 would fall back to the SELECT this file
+-- just revoked.
+notify pgrst, 'reload schema';
