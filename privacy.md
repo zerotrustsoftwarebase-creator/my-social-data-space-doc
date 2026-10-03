@@ -5,7 +5,7 @@ permalink: /privacy/
 
 ## My (Social) Data Space privacy policy
 
-**Last updated: 26 August 2026**
+**Last updated: 3 October 2026**
 
 ### 1. Who is responsible
 
@@ -17,7 +17,8 @@ open **an issue at https://github.com/zerotrustsoftwarebase-creator/my-social-da
 This app keeps what you record on your own device. There is no account on our
 servers, we operate no server that receives your data, and we do not collect
 analytics or advertising identifiers. We cannot see your data, so we cannot sell
-it, share it or hand it over.
+it, share it or hand it over. If you write to us for support, we receive only what
+you choose to send.
 
 Things leave your device only when you choose to share them, and then they go to
 the people or the topic you picked — directly to a phone nearby, or through a
@@ -46,6 +47,8 @@ direct result of something you do:
 | A data request, or your answer to one | You create a request, or approve an answer |
 | Challenge entries and governance votes | You create or cast them |
 | An abuse report | You report something, and a community service is connected |
+| Support details: app version, Android version and up to 20 fixed status codes | You review them in **Help**, then copy them or include them in an email you send |
+| An invitation: a community service's address and public connection key | You share a link or QR code you created for it |
 
 **Never sent.** Private entries, drafts, keys, and your local reputation ledger.
 Private one-to-one messages travel sealed to the recipient's phone and never pass
@@ -76,6 +79,30 @@ Three specifics you should know before you publish anything:
 - **A community service keeps what it was given.** The services this app speaks
   to are append-only: deleting a post publishes a signed deletion that every app
   honours, but the operator's copy is the operator's to remove.
+
+**Support requests.** If you contact us from **Help**, your message goes from your
+own email app to the support address shown there, and we receive what you write
+and your email address. We use them only to answer you. Diagnostic details are
+optional and never sent automatically. While the app runs it keeps at most 20 fixed
+status codes, such as `SYNC_OFFLINE` or `SERVICE_UNREACHABLE`, from service setup,
+sync and draft saving. They are held in memory only and forgotten when the app
+closes. They contain no entries, messages, names, identifiers, service address or
+key, times or device identifiers. **Review diagnostics** shows you the exact text,
+together with the app version and Android version, before anything leaves your
+phone. It leaves only if you then copy it, or choose **Include in email** and send
+that email yourself. Cancelling sends nothing.
+
+**Invitation links and QR codes.** Someone connected to a community service can
+create a link or QR code for it. It carries only that service's address and its
+public connection key, placed after the `#` in the link, a part browsers do not
+send to any server. It carries no account key and no entries. With the app
+installed, Android opens the link in the app, which shows the service for review;
+nothing is connected until you press **Use this service**. Without the app, the
+link opens a page on this website that shows the values for manual setup. That
+page runs only in your browser, loads nothing from other sites and sends nothing
+anywhere. Like every page of this website it is served by GitHub Pages, which, as
+host, processes ordinary access data such as your IP address under GitHub's own
+privacy statement.
 
 ### 5. Why
 
