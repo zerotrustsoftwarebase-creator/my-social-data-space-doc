@@ -70,14 +70,27 @@ alter or delete what it holds. Read that operator's own policy before you publis
 
 Three specifics you should know before you publish anything:
 
-- **Pictures and videos you publish are stored where anyone holding the link can
-  fetch them.** They are addressed by their content, but the file itself is not
-  access controlled. For newly attached JPEG, PNG and WebP photos, the app removes
-  standard descriptive metadata, including GPS fields in EXIF and XMP, before
-  computing that address. Other formats, including HEIC/HEIF/AVIF, GIF, video and
-  audio, may retain location or other metadata; the attachment screen explains
-  this before sharing. Older attachments are not automatically rewritten. Details
-  visible in the image or recording are part of the content and remain.
+- **Pictures, videos and recordings you publish are stored where anyone holding
+  the link can fetch them.** They are addressed by their content, but the file
+  itself is not access controlled. Before computing that address, the app removes
+  from a newly attached file:
+  - **JPEG, PNG and WebP photos:** standard descriptive metadata, including GPS
+    fields in EXIF and XMP.
+  - **HEIC, HEIF and AVIF photos:** the EXIF and XMP metadata, including GPS
+    fields.
+  - **GIF images:** comments and embedded metadata blocks such as XMP.
+  - **MP4, MOV, M4A and 3GP videos and recordings:** location tags and XMP
+    metadata. The recording time and camera details may remain, and some action
+    cameras and drones store location inside the video itself, which is not
+    removed. The attachment screen notes this beside a video.
+  - **MP3 audio:** its ID3, APE and Lyrics3 tags, such as title, artist, cover
+    picture and comments.
+
+  WebM and Matroska videos may retain location or other metadata; the attachment
+  screen explains this before sharing. A file whose structure does not allow this
+  removal to be done safely is not attached. Older attachments are not
+  automatically rewritten. Details visible in the image or audible in the
+  recording are part of the content and remain.
 - **Other people keep what you sent them.** Once somebody has received a post or a
   message, that copy is theirs and on their device.
 - **A community service keeps what it was given.** The services this app speaks
@@ -133,8 +146,8 @@ worth stating precisely because it is easy to assume otherwise from what the app
 can do. When you attach a picture or read numbers from a screenshot, the app asks
 Android to open the system camera or the system picker; that system component hands
 back the single file you chose, and the app never gains access to your camera or to
-the rest of your library. Metadata removal applies to newly attached JPEG, PNG and
-WebP images as described in §4; other formats may retain hidden location metadata.
+the rest of your library. Metadata removal applies to newly attached files as
+described in §4; WebM and Matroska videos may retain hidden location metadata.
 Your original file is unchanged. Text recognition from a screenshot runs on your device.
 
 The app requests no access to your contacts, your call log, your messages, your
