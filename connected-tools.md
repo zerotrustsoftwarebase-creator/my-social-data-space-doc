@@ -33,7 +33,7 @@ no source code to fetch.
   </div>
 </dl>
 
-### What you need
+## What you need
 
 - A computer that can reach both the machine and the phone on the same private
   network — a laptop, a home server, a Raspberry Pi. The connector does not
@@ -42,7 +42,7 @@ no source code to fetch.
   it from [python.org](https://www.python.org/downloads/).
 - The machine's address and, if it asks for one, a sign-in.
 
-### 1. Get the connector
+## 1. Get the connector
 
 [**Download `mds-connector.zip`**](../assets/connector/mds-connector.zip)
 — or read
@@ -60,7 +60,7 @@ python3 mds_connector.py check
 and confirms every refusal it relies on. It should print that everything
 checks out. If it prints anything else, stop there.
 
-### 2. Make the topic
+## 2. Make the topic
 
 ```sh
 python3 mds_connector.py profiles
@@ -73,7 +73,7 @@ Ollama. `fields` prints the topic to create in the app: open **Explore** and tap
 **Create a topic** (the plus at the top). Neither reads your machine and neither
 writes anything.
 
-### 3. See what it would add
+## 3. See what it would add
 
 Put the machine's address and sign-in in a file only you can read,
 `~/.mds-connector/credentials`:
@@ -94,7 +94,7 @@ This signs in to the machine and prints the exact entries it would add. It
 does not contact your phone and writes nothing anywhere. **This is the step
 worth spending time on**: if the values or units look wrong, fix them here.
 
-### 4. Connect it
+## 4. Connect it
 
 In the app open **My data → Tools → Connected tools → Create private invite**, choose
 your phone's private network, and copy the invite. Keep that screen open, then:
@@ -118,14 +118,14 @@ It remembers your phone's address, so there is nothing to type again. The app
 must be open while readings are being carried. Pause or disconnect the tool at
 any time from **My data → Tools → Connected tools**.
 
-### Keep the connector's own file
+## Keep the connector's own file
 
 The connector keeps its key and its progress in
 `~/.mds-connector/<topic>.json`. **Treat that file as a secret and back it
 up.** The permission on your phone was issued to the key inside it, so losing
 it means connecting again and approving again.
 
-### Adding another machine
+## Adding another machine
 
 Each machine the connector knows is one small JSON file in `profiles/`. Copy
 the closest one and change only its address, sign-in, which records to read,
@@ -137,7 +137,7 @@ measure a duration, join a list, count things, use a fixed value. If a machine
 needs a rule the connector does not know, it is not safe to hide that
 behaviour in a settings file.
 
-### When it does not work
+## When it does not work
 
 - **"That is not a usable invite."** Copy a fresh one, including the whole
   `mds-tool-invite.v1.` beginning. Invites are short-lived and only one

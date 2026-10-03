@@ -4,7 +4,7 @@ permalink: /closed-test/
 description: The two values closed-test testers paste into My (Social) Data Space to see the shared topics, and the exact taps to enter them.
 ---
 
-## Closed test: connect the test community service
+# Closed test: connect the test community service
 
 **For testers of the Google Play closed test.**
 
@@ -13,7 +13,7 @@ Explore and the Feed are empty. For this test there is a **test server with
 four topics and example posts**. Connecting it takes one minute. Nothing else in
 the app needs it.
 
-### The quick way: one tap
+## The quick way: one tap
 
 On the phone that has the app, open this page and tap:
 
@@ -23,7 +23,7 @@ The app opens and shows the test service for review. Tap **Use this service**,
 then choose your topics. If the link opens a web page instead of the app, use
 the two values below.
 
-### 1. Or copy the two values
+## 1. Or copy the two values
 
 <div class="copy-block">
   <label for="svc-url">Service URL</label>
@@ -62,7 +62,7 @@ document.querySelectorAll('button[data-copy]').forEach(function(b){
 });
 </script>
 
-### 2. Paste them into the app
+## 2. Paste them into the app
 
 1. Open the app. If you have not yet, tap **Create my private account** (it only creates a key on your phone — no sign-up).
 2. Tap **My data** (bottom right) → **Settings** → **Community service**.
@@ -71,14 +71,14 @@ document.querySelectorAll('button[data-copy]').forEach(function(b){
 5. Optional: under **Save for later**, type a name such as *Closed test* and tap
    **Save to your services**.
 
-### 3. See it working
+## 3. See it working
 
 Tap **Explore**: you should see **Specialty Coffee**, **Powerlifting**, **Macro
 Kitchen** and **Field Recordings**. Join the first three. The **Feed** now shows
 the example posts — tap a post's photo, or **View data**, to turn it over to
 its data. From here, the tasks in the test description apply.
 
-### What this service is
+## What this service is
 
 A community service is whoever receives what you publish. This one is a
 temporary server run for this test by the app's developer; it will be deleted

@@ -4,7 +4,7 @@ permalink: /community-service/
 description: How to join a community in My (Social) Data Space with an invitation link or QR code, how to enter a service by hand, and how to start one yourself.
 ---
 
-## Communities: join one, or start your own
+# Communities: join one, or start your own
 
 **Last updated: 3 October 2026**
 
@@ -22,7 +22,7 @@ the Feed, and what you share stays on your phone or goes to phones nearby.
 > **In the closed test?** The test service's invitation and values are on the
 > [closed-test page](../closed-test/). This page is the general explanation.
 
-### Join with an invitation
+## Join with an invitation
 
 The easiest way in. Whoever runs the community — or any member — sends you a
 link or shows you a QR code.
@@ -39,7 +39,7 @@ It holds no password, no account and none of anybody's entries. If a link opens
 in the browser instead of the app, the page shows the same three values to enter
 by hand, as described next.
 
-### Enter a service by hand
+## Enter a service by hand
 
 Three values, all of which the person running the service can give you:
 
@@ -63,14 +63,14 @@ Connecting uploads nothing you already recorded. From then on, entries you mark
 The app refuses a secret or service-role key by its shape. That is deliberate: a
 secret key inside an app on somebody's phone is a secret no longer.
 
-### Invite your members
+## Invite your members
 
 While you use a service, **My data → Settings → Community service → Invite with
 link or QR** shows a QR code and a **Copy invitation link** button. Send the link
 or let people scan the code. Everyone still reviews the service and taps
 **Use this service** themselves.
 
-### Start a community — Supabase as the worked example
+## Start a community — Supabase as the worked example
 
 The service is ordinary Postgres behind PostgREST plus an object store. Any
 Supabase project has exactly that, on the free tier, in about ten minutes.
@@ -89,7 +89,7 @@ Supabase project has exactly that, on the free tier, in about ten minutes.
 4. **Connect your own phone** with the URL and key as described above, then
    **invite your members**.
 
-### When it does not work
+## When it does not work
 
 - **"Will not carry GIFs / this kind of file yet."** The service's schema is
   older than the app. Run the latest
@@ -106,7 +106,7 @@ Supabase project has exactly that, on the free tier, in about ten minutes.
   saved service tells the two apart: it asks the service what it will actually
   carry and names whatever is missing, with the fix. It writes nothing.
 
-### What the service can and cannot see
+## What the service can and cannot see
 
 Everything you publish into a community topic is readable by the service,
 because carrying it is its job. Private messages are sealed to their recipient

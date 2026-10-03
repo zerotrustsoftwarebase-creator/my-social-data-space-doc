@@ -4,7 +4,7 @@ permalink: /child-safety/
 description: Standards of the My (Social) Data Space app against child sexual abuse and exploitation (CSAE), how to report, and what happens to a report.
 ---
 
-## My (Social) Data Space — child safety standards
+# My (Social) Data Space — child safety standards
 
 **Last updated: 3 October 2026**
 
@@ -13,7 +13,7 @@ published on Google Play by **Zero Trust Software**, against child sexual
 abuse and exploitation (CSAE). They apply to everything the app lets people
 publish, send or receive.
 
-### 1. Zero tolerance
+## 1. Zero tolerance
 
 We prohibit, without exception:
 
@@ -31,7 +31,7 @@ plain words: no sexual content or nudity in public topics or shared messages,
 nothing illegal where you are, nothing that targets somebody. The app is not
 directed to children and is listed for adults (18+).
 
-### 2. How the app is built, and what that means for safety
+## 2. How the app is built, and what that means for safety
 
 The app keeps what a person records on their own device. There is no account
 on a server operated by us and we do not host or pre-screen content. Things
@@ -44,7 +44,7 @@ to us, and we cannot delete a copy from a device we do not control. What we
 can do is described in §4, and every screen in the app that offers to report
 or block says exactly what its effect is rather than implying more.
 
-### 3. Reporting inside the app
+## 3. Reporting inside the app
 
 Every post and every message in a topic can be reported **without leaving the
 app**: open the menu on the post or message and choose **Report this post** or
@@ -68,7 +68,7 @@ with "child safety" in the subject. Describe what you saw and where; **do not
 attach or forward the material itself** — possessing or sending it is illegal
 in most countries, and we do not need it to act.
 
-### 4. What we do when we obtain actual knowledge of CSAM
+## 4. What we do when we obtain actual knowledge of CSAM
 
 1. **We act on it, and we do not delay.** We hold no copies, so there is
    nothing to delete on our side; what we do instead is stop it spreading:
@@ -85,7 +85,7 @@ in most countries, and we do not need it to act.
    competent authority there, and NCMEC's CyberTipline where it is the
    appropriate route. We cooperate with lawful requests from law enforcement.
 
-### 5. Compliance with child safety laws
+## 5. Compliance with child safety laws
 
 We comply with the laws that apply to us, including the German Criminal Code
 (§ 184b StGB and related provisions), the EU Digital Services Act as far as it
@@ -93,13 +93,13 @@ applies to a service of this shape, and any duty to report child sexual abuse
 material to the competent authorities. Where a law requires more of us than
 these standards, the law prevails.
 
-### 6. Point of contact
+## 6. Point of contact
 
 A designated contact who is able to speak to these practices and to our
 compliance with them is reachable at **zerotrustsoftwarebase@gmail.com**.
 The contact's name and further details are on file with Google Play.
 
-### 7. Changes
+## 7. Changes
 
 If these standards change, the updated version appears at this address with a
 new date. They are referenced from the app's [privacy policy](../privacy/)

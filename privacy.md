@@ -3,16 +3,16 @@ title: Privacy policy
 permalink: /privacy/
 ---
 
-## My (Social) Data Space privacy policy
+# My (Social) Data Space privacy policy
 
 **Last updated: 3 October 2026**
 
-### 1. Who is responsible
+## 1. Who is responsible
 
 The developer of My (Social) Data Space (GitHub: `zerotrustsoftwarebase-creator`) provides this app. For questions about this policy,
 open **an issue at https://github.com/zerotrustsoftwarebase-creator/my-social-data-space-doc/issues** (please do not put personal data into a public issue).
 
-### 2. The short version
+## 2. The short version
 
 This app keeps what you record on your own device. There is no account on our
 servers, we operate no server that receives your data, and we do not collect
@@ -25,7 +25,7 @@ the people or the topic you picked — directly to a phone nearby, or through a
 community service **you** connected. Until you connect one, the app talks to no
 server at all.
 
-### 3. What is stored, and where
+## 3. What is stored, and where
 
 **On your device only, always.** Your entries, drafts, private notes, your
 cryptographic keys, your local reputation ledger, and the structure of the topics
@@ -54,7 +54,7 @@ direct result of something you do:
 Private one-to-one messages travel sealed to the recipient's phone and never pass
 through a community service.
 
-### 4. Who receives it
+## 4. Who receives it
 
 **With no community service connected** (how the app is installed): only the
 device you selected, directly over your local network. No operator, including us,
@@ -104,13 +104,13 @@ anywhere. Like every page of this website it is served by GitHub Pages, which, a
 host, processes ordinary access data such as your IP address under GitHub's own
 privacy statement.
 
-### 5. Why
+## 5. Why
 
 To make the app work: to deliver what you chose to share to the people you chose
 to share it with, and to show you what other people published. There is no other
 purpose. No profiling, no advertising, no analytics.
 
-### 6. Permissions
+## 6. Permissions
 
 The complete set the app declares — there is nothing else:
 
@@ -139,7 +139,7 @@ A community service is only ever reached over an encrypted (`https`) connection;
 the app refuses to save any other address. Nearby sharing between phones is
 encrypted end to end on your local network.
 
-### 7. Deleting your data
+## 7. Deleting your data
 
 **On this device.** The app can erase everything it holds: every entry, every
 message, your keys and your identity, behind a confirmation and a device unlock.
@@ -157,12 +157,12 @@ act on it:
   not us — decides what a deletion means there. Ask them directly; the address is
   the one you entered under **Settings → Community service**.
 
-### 8. Children
+## 8. Children
 
 This app is not directed to children. It carries content people write and lets
 people message each other, and we do not knowingly collect anything from a child.
 
-### 9. Changes
+## 9. Changes
 
 If this policy changes, the updated version appears at this address with a new
 date. The app also shows a summary of this policy in **About**, and that summary is
