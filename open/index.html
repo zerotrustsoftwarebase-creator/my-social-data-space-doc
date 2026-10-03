@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Open in My (Social) Data Space</title>
+<style>body{font:1.1rem system-ui;max-width:36rem;margin:3rem auto;padding:1rem;line-height:1.6;overflow-wrap:break-word;hyphens:auto}h1{font-size:clamp(1.6rem,8vw,2.2rem);line-height:1.2}.code{font:700 1.8rem ui-monospace,monospace;letter-spacing:.12em}a{color:#7c74f0}</style>
+<h1 id="title">Open in My (Social) Data Space</h1>
+<p id="lead">This link opens something in the My (Social) Data Space app for Android.</p>
+<section id="details" hidden>
+  <p>On a phone with the app installed and up to date, Android opens the link in the app directly. If you landed here instead:</p>
+  <ol>
+    <li>Install or update <a href="https://play.google.com/store/apps/details?id=my.social.data.space">My (Social) Data Space</a>, then tap the link again.</li>
+    <li>Or, in the app, open <strong>Explore</strong>, tap <strong>#</strong> (Open a link or code) and enter this code:</li>
+  </ol>
+  <p class="code" id="code"></p>
+  <p>The code finds it on a phone that already has it. The link itself names it and nothing else — no entries, no names, no service details.</p>
+</section>
+<p id="problem" role="status"></p>
+<script>
+'use strict';
+const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+async function codeFor(material) {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(material)));
+  let value = 0n;
+  for (let i = 0; i < 5; i++) value = (value << 8n) | BigInt(digest[i]);
+  let out = '';
+  for (let i = 7; i >= 0; i--) {
+    if (i === 3) out += '-';
+    out += alphabet[Number((value >> BigInt(i * 5)) & 31n)];
+  }
+  return out;
+}
+(async () => {
+  try {
+    const fields = new URLSearchParams(location.hash.slice(1));
+    const keys = [...fields.keys()];
+    if (location.hash.length > 512 || keys.some(k => fields.getAll(k).length !== 1) || fields.get('v') !== '1') throw 0;
+    const rest = keys.filter(k => k !== 'v').sort().join(',');
+    const id = /^[A-Za-z0-9_.:-]{1,160}$/, postId = /^[A-Za-z0-9_.:-]{1,200}$/;
+    let kind, code;
+    if (rest === 't' && id.test(fields.get('t'))) { kind = 'topic'; code = 'T-' + await codeFor('topic:' + fields.get('t')); }
+    else if ((rest === 'p' || rest === 'p,t') && postId.test(fields.get('p')) && (rest === 'p' || id.test(fields.get('t')))) { kind = 'post'; code = 'P-' + await codeFor('post:' + fields.get('p')); }
+    else if (rest === 'u' && /^did:key:z[A-Za-z0-9_-]{43}$/.test(fields.get('u'))) { kind = 'profile'; code = await codeFor(fields.get('u')); }
+    else throw 0;
+    document.getElementById('title').textContent = 'Open this ' + kind + ' in My (Social) Data Space';
+    document.getElementById('lead').textContent = 'This link opens a ' + kind + ' in the My (Social) Data Space app for Android.';
+    document.getElementById('code').textContent = code;
+    document.getElementById('details').hidden = false;
+  } catch (_) {
+    document.getElementById('problem').textContent = 'This link is incomplete or was changed. Ask for a new one.';
+  }
+})();
+</script></html>
