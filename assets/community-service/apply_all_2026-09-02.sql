@@ -1031,3 +1031,131 @@ $$;
 
 revoke all on function public.mds_relay_event_heads(text[]) from public;
 grant execute on function public.mds_relay_event_heads(text[]) to anon, authenticated;
+
+-- ============================================================
+-- supabase/migrations/202608270001_relay_event_heads_count.sql
+-- ============================================================
+-- The event-heads hint reports, per topic, the highest sequence AND the number
+-- of rows. A row that commits late with a lower sequence (two writers, the
+-- slower transaction landing behind the faster one) leaves the maximum where
+-- it was; the count moves. A client that remembers the last head it acted on
+-- and skips the page read only when the head is unchanged therefore fetches
+-- exactly when something landed, including behind its cursor — which is what
+-- the client's overlap re-read is for. Clients that read only `cursor` keep
+-- working: the column set grows, its meaning does not change.
+drop function if exists public.mds_relay_event_heads(text[]);
+create function public.mds_relay_event_heads(requested_space_ids text[])
+returns table(space_id text, cursor text, total bigint)
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select requested.space_id,
+         max(events.sequence)::text as cursor,
+         count(events.sequence) as total
+    from unnest(requested_space_ids) as requested(space_id)
+    left join public.mds_relay_events as events
+      on events.space_id = requested.space_id
+   where char_length(requested.space_id) between 1 and 160
+   group by requested.space_id
+   limit 64;
+$$;
+revoke all on function public.mds_relay_event_heads(text[]) from public;
+grant execute on function public.mds_relay_event_heads(text[]) to anon, authenticated;
+
+-- ============================================================
+-- supabase/migrations/202609020001_private_message_mailbox.sql
+-- ============================================================
+-- Sealed private messages, for two people who are no longer on the same
+-- network — the leg that makes a remembered contact reachable at all.
+--
+-- From the user: somebody met nearby is "remembered but not reachable via
+-- normal internet", which left every private conversation dependent on both
+-- phones being in the same place at the same time.
+--
+-- **Routed on an opaque address, not on a DID — the one thing that makes this
+-- table different from `mds_steward_report_mailbox`.** That table carries
+-- `recipient_did` in the clear and says plainly what it discloses: somebody
+-- sent this steward something. For a steward that is an acceptable price. For
+-- private messages between two people it is the social graph itself — who
+-- writes to whom, how often, and, by counting distinct senders, how many
+-- people somebody talks to. None of that is content, so sealing the payload
+-- does not protect any of it.
+--
+-- So the routing key here is 32 bytes of randomness that one pod minted for
+-- one contact and handed over in person, over an authenticated nearby session.
+-- It names nobody. A second contact of the same person gets a different
+-- address, so an operator reading this table cannot tell which addresses
+-- belong to one person: they see many addresses receiving occasional sealed
+-- bytes, and no way to group them.
+--
+-- **What this still discloses, stated rather than glossed.** There are no
+-- accounts, so this database cannot authenticate anybody and cannot be asked
+-- to show a row only to its reader — the same honest limit the data-request
+-- and steward migrations record. Anyone who can read it learns that one
+-- address received bytes at one time, and could correlate two addresses by
+-- timing if they were watching for that. They do not learn who either party
+-- is, what was said, or that any two addresses are related. Removing the
+-- timing would need onion routing this app does not have, and claiming
+-- otherwise in a comment would be the security theatre these files avoid.
+--
+-- **The address is a bearer name.** Anyone who learns one can drop at it and
+-- read what is there, which is why confidentiality is the sealed payload's job
+-- and never this table's, and why the address is unguessable rather than
+-- derived from anything two people both know.
+--
+-- Append-only for the same reason as every other relay table: giving the
+-- publishable key UPDATE or DELETE would let any installation rewrite or erase
+-- anybody's post.
+
+create table if not exists public.mds_private_message_mailbox (
+  sequence bigint generated always as identity primary key,
+  -- The opaque address, exactly as the pod mints it: 32 bytes base64url with
+  -- the padding stripped. Pinned as a shape so a row addressed to something
+  -- this app could never have minted cannot be written at all.
+  inbox_id text not null check (inbox_id ~ '^[A-Za-z0-9_-]{43}$'),
+  -- One `MailboxDrop`: epk, nonce, ciphertext, mac. Four keys, and not one of
+  -- them a name — not in a column and not in the payload either. The app's
+  -- ordinary `SealedEnvelope` carries `sender_did` and `recipient_did` in its
+  -- JSON, which would have put the social graph in a row anybody can read
+  -- while this comment promised otherwise. Authorship travels signed inside
+  -- the ciphertext, verified by the receiving pod against the identity that
+  -- payload itself claims, exactly as the steward mailbox does.
+  --
+  -- 256 KiB: a message body may be 128 KiB (`PersonText.messageBodyByteLimit`),
+  -- which seals and base64-encodes to roughly 178 KiB with its envelope around
+  -- it. Sized so that anything the app lets somebody write can actually be
+  -- delivered — a smaller cap would send short messages and silently strand
+  -- long ones.
+  payload jsonb not null check (octet_length(payload::text) <= 262144),
+  inserted_at timestamptz not null default now()
+);
+
+-- A pod collects one address at a time, oldest first, resuming from the last
+-- sequence it acted on rather than re-reading the mailbox.
+create index if not exists mds_private_message_mailbox_inbox_idx
+  on public.mds_private_message_mailbox (inbox_id, sequence);
+
+alter table public.mds_private_message_mailbox enable row level security;
+revoke all on public.mds_private_message_mailbox from anon, authenticated;
+
+-- SELECT and INSERT and nothing else. Without UPDATE nobody can rewrite a
+-- sealed message into something the bytes do not say; without DELETE nobody
+-- can remove somebody else's post before they collect it.
+grant select, insert on public.mds_private_message_mailbox to anon, authenticated;
+grant usage, select on sequence public.mds_private_message_mailbox_sequence_seq
+  to anon, authenticated;
+
+drop policy if exists "anyone may drop a sealed message" on public.mds_private_message_mailbox;
+create policy "anyone may drop a sealed message"
+  on public.mds_private_message_mailbox for insert to anon, authenticated with check (true);
+
+-- Readable by anybody, and meaningless to everybody but the holder of the
+-- address and the key. The same bet the steward mailbox makes, and safe for
+-- the same reason: confidentiality is the payload's job, because it cannot be
+-- this database's.
+drop policy if exists "sealed messages are readable and unreadable"
+  on public.mds_private_message_mailbox;
+create policy "sealed messages are readable and unreadable"
+  on public.mds_private_message_mailbox for select to anon, authenticated using (true);

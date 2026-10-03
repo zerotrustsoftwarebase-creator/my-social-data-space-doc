@@ -6,7 +6,7 @@ description: Standards of the My (Social) Data Space app against child sexual ab
 
 ## My (Social) Data Space — child safety standards
 
-**Last updated: 26 August 2026**
+**Last updated: 3 October 2026**
 
 These are the standards of the Android app **My (Social) Data Space**,
 published on Google Play by **Zero Trust Software**, against child sexual
@@ -46,11 +46,12 @@ or block says exactly what its effect is rather than implying more.
 
 ### 3. Reporting inside the app
 
-Every post, every message and every person in the app can be reported
-**without leaving the app**: open the menu on the post, message or profile and
-choose **Report**. One of the fixed categories is **Sexual content**; another is
-**Violence or illegal**. Every person can also be **blocked** from the same
-place.
+Every post and every message in a topic can be reported **without leaving the
+app**: open the menu on the post or message and choose **Report this post** or
+**Report this message**. The same menus offer **Report this person**. Among the
+fixed categories are **Sexual content** and **Violence or illegal activity**.
+Every person can be **blocked** from the same menus, and in a private
+conversation with them.
 
 What a report does, immediately and on the reporting device: the content is
 hidden, it is refused if it arrives again, and it is no longer passed on to
@@ -71,9 +72,10 @@ in most countries, and we do not need it to act.
 
 1. **We act on it, and we do not delay.** We hold no copies, so there is
    nothing to delete on our side; what we do instead is stop it spreading:
-   we publish the content identifiers and the author identity on the signed
-   safety list that the app can subscribe to, so every subscribed copy of the
-   app refuses to show, store or pass on that material and that person.
+   we publish the content identifiers and the author identity on a signed
+   safety list. Anyone can add such a list under **Settings → Shared safety
+   lists**, and every copy of the app that uses it refuses to show, store or
+   pass on that material and that person.
 2. **We ask the operator of any community service involved to remove it**, and
    we tell them what we know.
 3. **We preserve what we received** — the report, the identifiers, the time —

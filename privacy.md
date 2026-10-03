@@ -115,8 +115,10 @@ purpose. No profiling, no advertising, no analytics.
 The complete set the app declares — there is nothing else:
 
 - **Notifications** — to tell you when an alert you configured has been met.
-- **Biometric / fingerprint** — to unlock the app, if you turn that on. The check
-  happens on your device and we never receive biometric data.
+- **Biometric / fingerprint** — to confirm sensitive actions, such as saving a copy
+  of your data, approving a data request, deleting your account or recovering it.
+  Your phone's own fingerprint, face or PIN prompt is used, the check happens on
+  your device, and we never receive biometric data.
 - **Internet and network state** — to reach a community service, if you connect
   one, and to find phones on your local network when you share nearby.
 - **Run at start-up, vibrate, keep awake** — so a check you scheduled still runs

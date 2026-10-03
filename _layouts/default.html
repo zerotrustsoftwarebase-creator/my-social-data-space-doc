@@ -12,10 +12,13 @@
 <meta property="og:title" content="{{ page.title }} — My (Social) Data Space">
 <meta property="og:image" content="{{ '/assets/og-1200x630.png' | absolute_url }}">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Open+Sans:wght@400;600&display=swap">
+<meta name="color-scheme" content="dark">
+<link rel="preload" href="{{ '/assets/fonts/montserrat-latin.woff2' | relative_url }}" as="font" type="font/woff2" crossorigin>
 <style>
+  @font-face{font-family:'Montserrat';font-style:normal;font-weight:700 800;font-display:swap;src:url('{{ '/assets/fonts/' | relative_url }}montserrat-latin-ext.woff2') format('woff2');unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF}
+  @font-face{font-family:'Montserrat';font-style:normal;font-weight:700 800;font-display:swap;src:url('{{ '/assets/fonts/' | relative_url }}montserrat-latin.woff2') format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+  @font-face{font-family:'Open Sans';font-style:normal;font-weight:400 600;font-display:swap;src:url('{{ '/assets/fonts/' | relative_url }}open-sans-latin-ext.woff2') format('woff2');unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF}
+  @font-face{font-family:'Open Sans';font-style:normal;font-weight:400 600;font-display:swap;src:url('{{ '/assets/fonts/' | relative_url }}open-sans-latin.woff2') format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
   :root {
     --ground:#080A0F; --surface:#10131A; --raised:#171B24; --line:#303746;
     --ink:#F7F8FC; --ink-2:#B1B8C8; --brand:#8B7CFF; --brand-bright:#A99FFF; --mint:#45D69A; --on-light:#11131A;
@@ -38,8 +41,8 @@
   .brand span span { color:var(--brand-bright); }
   .mobile-nav { display:none; }
   nav ul { list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:.25rem; }
-  nav a { display:inline-block; padding:.6rem .8rem; color:var(--ink-2); text-decoration:none; font-weight:600; border-radius:8px; white-space:nowrap; }
-  nav a:hover { color:var(--ink); background:var(--raised); }
+  nav a { display:inline-flex; align-items:center; min-height:44px; padding:.5rem .8rem; color:var(--ink-2); text-decoration:none; font-weight:600; border-radius:8px; white-space:nowrap; }
+  nav a:hover, nav a[aria-current="page"] { color:var(--ink); background:var(--raised); }
   main { padding:clamp(2rem,5vw,4rem) 0 clamp(3rem,6vw,5rem); }
   .prose { max-width:72ch; }
   .prose h1, .prose h2, .prose h3 { font-family:var(--font-head); line-height:1.15; letter-spacing:-.015em; text-wrap:balance; scroll-margin-top:5rem; }
@@ -67,7 +70,8 @@
   .layer-list dd strong { display:block; margin-bottom:.1rem; font-size:.78em; letter-spacing:.06em; text-transform:uppercase; }
   .prose hr { border:0; border-top:1px solid var(--line); margin:2rem 0; }
   footer { border-top:1px solid var(--line); padding:2rem 0 3rem; color:var(--ink-2); font-size:.95rem; }
-  footer ul { list-style:none; margin:0 0 1rem; padding:0; display:flex; flex-wrap:wrap; gap:.25rem 1.25rem; }
+  footer ul { list-style:none; margin:0 0 1rem; padding:0; display:flex; flex-wrap:wrap; gap:.1rem 1.25rem; }
+  footer ul a { display:inline-flex; align-items:center; min-height:44px; }
   @media (max-width:600px) {
     .site-header { position:static; }
     .site-header .wrap { flex-wrap:wrap; justify-content:flex-start; padding-top:.5rem; padding-bottom:.5rem; }
@@ -100,9 +104,9 @@
     <nav class="desktop-nav" aria-label="Site">
       <ul>
         <li><a href="{{ '/' | relative_url }}">Home</a></li>
-        <li><a href="{{ '/community-service/' | relative_url }}">Community service</a></li>
-        <li><a href="{{ '/connected-tools/' | relative_url }}">Connected tools</a></li>
-        <li><a href="{{ '/privacy/' | relative_url }}">Privacy policy</a></li>
+        <li><a href="{{ '/community-service/' | relative_url }}"{% if page.url == '/community-service/' %} aria-current="page"{% endif %}>Communities</a></li>
+        <li><a href="{{ '/connected-tools/' | relative_url }}"{% if page.url == '/connected-tools/' %} aria-current="page"{% endif %}>Connected tools</a></li>
+        <li><a href="{{ '/privacy/' | relative_url }}"{% if page.url == '/privacy/' %} aria-current="page"{% endif %}>Privacy policy</a></li>
       </ul>
     </nav>
     <details class="mobile-nav">
@@ -112,9 +116,9 @@
       <nav aria-label="Site">
         <ul>
           <li><a href="{{ '/' | relative_url }}">Home</a></li>
-          <li><a href="{{ '/community-service/' | relative_url }}">Community service</a></li>
-          <li><a href="{{ '/connected-tools/' | relative_url }}">Connected tools</a></li>
-          <li><a href="{{ '/privacy/' | relative_url }}">Privacy policy</a></li>
+          <li><a href="{{ '/community-service/' | relative_url }}"{% if page.url == '/community-service/' %} aria-current="page"{% endif %}>Communities</a></li>
+          <li><a href="{{ '/connected-tools/' | relative_url }}"{% if page.url == '/connected-tools/' %} aria-current="page"{% endif %}>Connected tools</a></li>
+          <li><a href="{{ '/privacy/' | relative_url }}"{% if page.url == '/privacy/' %} aria-current="page"{% endif %}>Privacy policy</a></li>
         </ul>
       </nav>
     </details>
@@ -131,13 +135,14 @@
   <div class="wrap">
     <ul aria-label="Footer">
       <li><a href="{{ '/' | relative_url }}">Home</a></li>
+      <li><a href="{{ '/community-service/' | relative_url }}">Communities</a></li>
       <li><a href="{{ '/connected-tools/' | relative_url }}">Connected tools</a></li>
       <li><a href="{{ '/privacy/' | relative_url }}">Privacy policy</a></li>
       <li><a href="{{ '/privacy/#7-deleting-your-data' | relative_url }}">Deleting your data</a></li>
       <li><a href="{{ '/child-safety/' | relative_url }}">Child safety standards</a></li>
       <li><a href="https://github.com/zerotrustsoftwarebase-creator/my-social-data-space-doc/issues">Contact</a></li>
     </ul>
-    <small>© 2026 My (Social) Data Space.</small>
+    <small>© 2026 Zero Trust Software.</small>
   </div>
 </footer>
 </body>

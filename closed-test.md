@@ -6,14 +6,24 @@ description: The two values closed-test testers paste into My (Social) Data Spac
 
 ## Closed test: connect the test community service
 
-**For testers of the Google Play closed test, August–September 2026.**
+**For testers of the Google Play closed test.**
 
 The app ships with no community service built in, so right after installing,
 Explore and the Feed are empty. For this test there is a **test server with
-four topics and 22 example posts**. Connecting it takes one minute and two
-pastes. Nothing else in the app needs it.
+four topics and example posts**. Connecting it takes one minute. Nothing else in
+the app needs it.
 
-### 1. Copy the two values
+### The quick way: one tap
+
+On the phone that has the app, open this page and tap:
+
+<p><a class="join-btn" href="https://zerotrustsoftwarebase-creator.github.io/my-social-data-space-doc/join#url=https%3A%2F%2Fywbglcekixlmyhpsjghn.supabase.co&key=sb_publishable_pacN3VPYl0LG4lkUqSEb7Q_yZXSx1tS&bucket=post_media">Join the test community</a></p>
+
+The app opens and shows the test service for review. Tap **Use this service**,
+then choose your topics. If the link opens a web page instead of the app, use
+the two values below.
+
+### 1. Or copy the two values
 
 <div class="copy-block">
   <label for="svc-url">Service URL</label>
@@ -37,6 +47,8 @@ pastes. Nothing else in the app needs it.
 .copy-row button{flex:none;min-width:5.5rem;padding:.7rem 1rem;border-radius:10px;border:0;background:var(--brand);color:var(--on-light);font-weight:700;font-size:1rem;cursor:pointer}
 .copy-row button.done{background:var(--mint)}
 .copy-hint{font-size:.92rem;color:var(--ink-2);margin:.9rem 0 0}
+.join-btn{display:inline-flex;align-items:center;justify-content:center;min-height:3rem;padding:.7rem 1.4rem;border-radius:999px;background:var(--brand);color:var(--on-light);font-weight:700;text-decoration:none}
+.join-btn:hover{background:var(--brand-bright);color:var(--on-light)}
 </style>
 <script>
 document.querySelectorAll('button[data-copy]').forEach(function(b){
@@ -56,14 +68,15 @@ document.querySelectorAll('button[data-copy]').forEach(function(b){
 2. Tap **My data** (bottom right) → **Settings** → **Community service**.
 3. Paste the URL into **Service URL** and the key into **Publishable key**. Leave **Media bucket** as it is (`post_media`).
 4. Tap **Use this service**. The app checks that the server answers.
-5. Optional: tap **Save to your services** and give it a name, e.g. *Closed test*.
+5. Optional: under **Save for later**, type a name such as *Closed test* and tap
+   **Save to your services**.
 
 ### 3. See it working
 
 Tap **Explore**: you should see **Specialty Coffee**, **Powerlifting**, **Macro
 Kitchen** and **Field Recordings**. Join the first three. The **Feed** now shows
-the example posts — tap a post's photo (or the **Details** button) to flip it
-to its data. From here, the tasks in the test description apply.
+the example posts — tap a post's photo, or **View data**, to turn it over to
+its data. From here, the tasks in the test description apply.
 
 ### What this service is
 

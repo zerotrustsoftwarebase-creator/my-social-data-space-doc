@@ -6,7 +6,7 @@ description: Download one file, make a topic, approve what it may do. No toolcha
 
 # Connect a tool or machine
 
-**Last updated: 31 August 2026**
+**Last updated: 3 October 2026**
 
 A connected tool adds readings from a camera system, sensor hub, server or
 script to a topic on your phone. It runs separately, has its own key, and can
@@ -69,8 +69,8 @@ python3 mds_connector.py fields --profile frigate
 
 `profiles` lists the machines the connector already knows — Frigate over HTTP
 or MQTT, Home Assistant sensors, Zigbee2MQTT, Plex, Streamystats, GitLab and
-Ollama. `fields` prints the topic to create in the app, under
-**My data → Topics → New topic**. Neither reads your machine and neither
+Ollama. `fields` prints the topic to create in the app: open **Explore** and tap
+**Create a topic** (the plus at the top). Neither reads your machine and neither
 writes anything.
 
 ### 3. See what it would add
@@ -96,7 +96,7 @@ worth spending time on**: if the values or units look wrong, fix them here.
 
 ### 4. Connect it
 
-In the app open **My data → Connected tools → Create private invite**, choose
+In the app open **My data → Tools → Connected tools → Create private invite**, choose
 your phone's private network, and copy the invite. Keep that screen open, then:
 
 ```sh
@@ -116,7 +116,7 @@ python3 mds_connector.py run --profile frigate --topic '<topic id>' --every 30
 
 It remembers your phone's address, so there is nothing to type again. The app
 must be open while readings are being carried. Pause or disconnect the tool at
-any time from **My data → Connected tools**.
+any time from **My data → Tools → Connected tools**.
 
 ### Keep the connector's own file
 
